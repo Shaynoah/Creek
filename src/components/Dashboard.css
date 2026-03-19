@@ -2275,6 +2275,18 @@
   .dashboard-container {
     padding-top: calc(var(--cf-header-h) + var(--cf-mobile-tab-h));
     padding-bottom: 0;
+    width: 100%;
+    max-width: 100%;
+    overflow-x: hidden;
+    animation: none;
+    background-size: auto;
+  }
+
+  .dashboard-header,
+  .dashboard-sidebar,
+  .dashboard-main,
+  .view-transition {
+    animation: none !important;
   }
 
   .dashboard-header {
@@ -2382,6 +2394,12 @@
 
   .dashboard-layout {
     flex-direction: column;
+    width: 100%;
+    max-width: 100%;
+    overflow-x: hidden;
+    min-height: calc(100svh - var(--cf-header-h) - var(--cf-mobile-tab-h));
+    height: auto;
+    padding-top: 0;
   }
   
   .dashboard-sidebar {
@@ -2487,21 +2505,41 @@
     margin-left: 0;
     padding-bottom: 8px;
     padding-top: 0;
+    width: 100%;
+    max-width: 100%;
+    overflow-x: hidden;
+    min-height: 0;
+    height: auto;
+    box-sizing: border-box;
+    animation: none;
+    transform: none;
   }
 
   /* Ensure the desktop sidebar offset never applies on mobile */
   .dashboard-layout.has-sidebar .dashboard-main {
-    margin-left: 0;
+    margin-left: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
   }
 
   /* Let content fill the screen */
+  .view-transition {
+    width: 100%;
+    max-width: 100%;
+    animation: none;
+  }
   .view-content {
     width: 100%;
+    max-width: 100%;
     min-height: 0;
+    overflow-x: hidden;
+    box-sizing: border-box;
   }
 
   .refill-form-container {
+    width: 100%;
     max-width: 100%;
+    box-sizing: border-box;
   }
   
   .view-content {
@@ -2525,9 +2563,37 @@
   .refill-form {
     gap: 24px;
   }
+
+  /* Stabilize touch interactions: avoid layout-jank transforms on mobile */
+  .nav-item,
+  .logout-btn,
+  .submit-btn,
+  .payment-label,
+  .view-content {
+    transition: box-shadow 0.2s ease, border-color 0.2s ease, background-color 0.2s ease, color 0.2s ease;
+  }
+
+  .nav-item:hover,
+  .logout-btn:hover,
+  .submit-btn:hover:not(:disabled),
+  .payment-option:hover .payment-label,
+  .view-content:hover,
+  .nav-item.active .nav-icon {
+    transform: none;
+  }
 }
 
 @media (max-width: 480px) {
+  .dashboard-container,
+  .dashboard-layout,
+  .dashboard-main,
+  .dashboard-layout.has-sidebar .dashboard-main,
+  .view-transition,
+  .view-content {
+    max-width: 100%;
+    overflow-x: hidden;
+  }
+
   .header-content {
     grid-template-columns: minmax(0, 1fr) auto auto;
     gap: 8px;
