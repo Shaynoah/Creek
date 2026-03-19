@@ -1,0 +1,31 @@
+.app-container {
+  width: 100%;
+  min-height: 100vh;
+}
+
+.app-stage {
+  width: 100%;
+  min-height: 100vh;
+  animation: appStageIn 420ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes appStageIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.992);
+    filter: blur(2px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    filter: blur(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-stage {
+    animation: none;
+    filter: none;
+    transform: none;
+  }
+}
