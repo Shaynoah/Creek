@@ -2579,7 +2579,7 @@
   }
   
   .view-content h2 {
-    font-size: 1.5rem;
+    font-size: 1.7rem;
   }
   
   .form-row {
@@ -2587,16 +2587,77 @@
     gap: 20px;
   }
 
+  .form-row > * {
+    min-width: 0;
+  }
+
+  .form-group,
+  .form-group label {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .form-group label {
+    font-size: 1rem;
+  }
+
   .inv-tank-form {
     grid-template-columns: 1fr;
+  }
+
+  .form-select,
+  .form-input {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    font-size: 1.04rem;
+    padding: 14px 14px;
+    box-sizing: border-box;
+  }
+
+  .form-select {
+    padding-right: 38px;
+    background-position: right 12px center;
   }
   
   .payment-options {
     grid-template-columns: 1fr;
   }
+
+  .payment-label {
+    width: 100%;
+    min-width: 0;
+    padding: 16px 14px;
+    gap: 12px;
+    min-height: 64px;
+    font-size: 1.06rem;
+    box-sizing: border-box;
+  }
   
   .refill-form {
     gap: 24px;
+  }
+
+  .daily-card-label,
+  .weekly-card-label,
+  .summary-label,
+  .week-day-label,
+  .my-orders-view .orders-table td::before {
+    font-size: 0.86rem;
+  }
+
+  .daily-card-value,
+  .weekly-card-value,
+  .summary-value,
+  .week-day-value {
+    font-size: 1.3rem;
+  }
+
+  .daily-card-hint,
+  .weekly-card-hint,
+  .week-day-hint,
+  .prod-sub {
+    font-size: 0.9rem;
   }
 
   /* Stabilize touch interactions: avoid layout-jank transforms on mobile */
@@ -2784,6 +2845,39 @@
     letter-spacing: 0.55px;
     width: auto;
   }
+
+  .form-select,
+  .form-input {
+    font-size: 1rem;
+    padding: 12px 12px;
+  }
+
+  .form-select {
+    padding-right: 34px;
+    background-position: right 10px center;
+  }
+
+  .payment-label {
+    min-height: 58px;
+    font-size: 1rem;
+    padding: 14px 12px;
+  }
+
+  .daily-card-label,
+  .weekly-card-label,
+  .summary-label,
+  .week-day-label,
+  .my-orders-view .orders-table td::before,
+  .inv-tanks-wrap .orders-table td::before {
+    font-size: 0.82rem;
+  }
+
+  .daily-card-value,
+  .weekly-card-value,
+  .summary-value,
+  .week-day-value {
+    font-size: 1.18rem;
+  }
 }
 
 @media (max-width: 420px) {
@@ -2804,6 +2898,6 @@
     padding: 10px 12px;
   }
   .orders-table {
-    min-width: 720px;
+    min-width: 0;
   }
 }
