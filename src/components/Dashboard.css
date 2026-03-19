@@ -625,7 +625,7 @@
   border-radius: 20px;
   padding: 40px;
   box-shadow: 0 8px 32px rgba(33, 150, 243, 0.1);
-  min-height: 400px;
+  min-height: 0;
   transition: box-shadow 260ms var(--cf-ease), transform 260ms var(--cf-ease);
 }
 
@@ -2485,7 +2485,7 @@
   .dashboard-main {
     padding: 24px 20px;
     margin-left: 0;
-    padding-bottom: 32px;
+    padding-bottom: 8px;
     padding-top: 0;
   }
 
@@ -2497,6 +2497,7 @@
   /* Let content fill the screen */
   .view-content {
     width: 100%;
+    min-height: 0;
   }
 
   .refill-form-container {
@@ -2505,6 +2506,7 @@
   
   .view-content {
     padding: 24px 20px;
+    min-height: 0;
   }
   
   .view-content h2 {

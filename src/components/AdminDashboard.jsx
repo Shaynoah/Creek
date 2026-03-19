@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import logo from '@src/assets/logo.png'
 import './Dashboard.css'
 
@@ -60,6 +60,7 @@ const AdminDashboard = ({ admin, onLogout, onProfileUpdate }) => {
     confirmPassword: '',
   })
   const [profileMsg, setProfileMsg] = useState('')
+  const mainScrollRef = useRef(null)
 
   const loadOrdersFromStorage = () => {
     try {
@@ -162,6 +163,23 @@ const AdminDashboard = ({ admin, onLogout, onProfileUpdate }) => {
   useEffect(() => {
     setProfileForm(p => ({ ...p, username: admin?.username || '' }))
   }, [admin])
+
+  // Keep section content pinned to top on load and on nav changes
+  useEffect(() => {
+    const el = mainScrollRef.current
+    if (!el) return
+    requestAnimationFrame(() => {
+      el.scrollTo({ top: 0, behavior: 'auto' })
+    })
+  }, [])
+
+  useEffect(() => {
+    const el = mainScrollRef.current
+    if (!el) return
+    requestAnimationFrame(() => {
+      el.scrollTo({ top: 0, behavior: 'auto' })
+    })
+  }, [activeView])
 
   // Date helpers and aggregations for Sales view
   const addDays = (date, days) => {
@@ -360,7 +378,7 @@ const AdminDashboard = ({ admin, onLogout, onProfileUpdate }) => {
             </button>
           </nav>
         </aside>
-        <main className="dashboard-main">
+        <main className="dashboard-main" ref={mainScrollRef}>
           <div key={activeView} className="view-transition">
             {activeView === 'dashboard' && (
               <div className="view-content weekly-summary-view">

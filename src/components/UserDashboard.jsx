@@ -31,6 +31,7 @@ const UserDashboard = ({ user, onLogout }) => {
   const [pendingOrder, setPendingOrder] = useState(null)
   const snackbarTimerRef = useRef(null)
   const ordersLoadedRef = useRef(false)
+  const mainScrollRef = useRef(null)
   const [snackbar, setSnackbar] = useState({
     open: false,
     message: '',
@@ -252,6 +253,23 @@ const UserDashboard = ({ user, onLogout }) => {
       if (snackbarTimerRef.current) clearTimeout(snackbarTimerRef.current)
     }
   }, [])
+
+  // Keep section content pinned to top on load and on tab/view changes
+  useEffect(() => {
+    const el = mainScrollRef.current
+    if (!el) return
+    requestAnimationFrame(() => {
+      el.scrollTo({ top: 0, behavior: 'auto' })
+    })
+  }, [])
+
+  useEffect(() => {
+    const el = mainScrollRef.current
+    if (!el) return
+    requestAnimationFrame(() => {
+      el.scrollTo({ top: 0, behavior: 'auto' })
+    })
+  }, [activeView])
 
   const handleSubmit = (e) => {
     e.preventDefault()
@@ -485,7 +503,7 @@ const UserDashboard = ({ user, onLogout }) => {
           </div>
         </aside>
 
-        <main className="dashboard-main">
+        <main className="dashboard-main" ref={mainScrollRef}>
           <div key={activeView} className="view-transition">
           {activeView === 'new-refill' && (
             <div className="view-content refill-form-container">
