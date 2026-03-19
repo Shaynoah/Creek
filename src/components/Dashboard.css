@@ -2345,9 +2345,15 @@
   
   .user-name {
     font-size: 1.05rem;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    line-height: 1.15;
+    max-width: 100%;
   }
   
   .header-right {
@@ -2422,11 +2428,14 @@
   
   .sidebar-nav {
     flex-direction: row;
-    overflow: hidden;
+    overflow-x: auto;
+    overflow-y: hidden;
     padding: 0;
     gap: 6px;
     justify-content: space-around;
+    scrollbar-width: none;
   }
+  .sidebar-nav::-webkit-scrollbar { display: none; }
   
   .nav-item {
     white-space: normal;
@@ -2441,6 +2450,28 @@
     background: transparent;
     border: 1px solid transparent;
     box-shadow: none;
+  }
+
+  /* Admin has more tabs: use scrollable pills to avoid squeezed labels */
+  .admin-nav {
+    justify-content: flex-start;
+    gap: 8px;
+    padding: 0 2px;
+  }
+
+  .admin-nav .nav-item {
+    flex: 0 0 92px;
+    min-width: 92px;
+    max-width: 92px;
+    padding: 8px 6px;
+  }
+
+  .admin-nav .nav-text {
+    font-size: 0.66rem;
+    line-height: 1.05;
+    letter-spacing: 0.2px;
+    word-break: break-word;
+    text-wrap: balance;
   }
   
   .nav-item::before,
@@ -2555,6 +2586,10 @@
     grid-template-columns: 1fr;
     gap: 20px;
   }
+
+  .inv-tank-form {
+    grid-template-columns: 1fr;
+  }
   
   .payment-options {
     grid-template-columns: 1fr;
@@ -2580,6 +2615,142 @@
   .view-content:hover,
   .nav-item.active .nav-icon {
     transform: none;
+  }
+
+  /* Orders table: convert horizontal columns into vertical key/value rows on mobile */
+  .my-orders-view .orders-table-wrap {
+    overflow-x: visible;
+  }
+
+  .my-orders-view .orders-table {
+    min-width: 0 !important;
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0 10px;
+  }
+
+  .my-orders-view .orders-table thead {
+    display: none;
+  }
+
+  .my-orders-view .orders-table tbody,
+  .my-orders-view .orders-table tr,
+  .my-orders-view .orders-table td {
+    display: block;
+    width: 100%;
+  }
+
+  .my-orders-view .orders-table tr {
+    border: 1px solid rgba(33, 150, 243, 0.14);
+    border-radius: 14px;
+    background: rgba(255, 255, 255, 0.92);
+    padding: 30px 10px 6px;
+    margin-bottom: 10px;
+    position: relative;
+  }
+
+  .my-orders-view .orders-table tr::before {
+    content: attr(data-order);
+    position: absolute;
+    top: 8px;
+    left: 10px;
+    font-size: 0.74rem;
+    font-weight: 900;
+    letter-spacing: 0.45px;
+    text-transform: uppercase;
+    color: #1565C0;
+    background: rgba(33, 150, 243, 0.12);
+    border: 1px solid rgba(33, 150, 243, 0.22);
+    border-radius: 999px;
+    padding: 2px 8px;
+  }
+
+  .my-orders-view .orders-table td {
+    border-bottom: 1px solid rgba(33, 150, 243, 0.08);
+    padding: 10px 8px;
+    text-align: left !important;
+    position: relative;
+    padding-left: 42%;
+    min-height: 42px;
+  }
+
+  .my-orders-view .orders-table td:last-child {
+    border-bottom: none;
+  }
+
+  .my-orders-view .orders-table td::before {
+    content: attr(data-label);
+    position: absolute;
+    left: 8px;
+    top: 10px;
+    width: 36%;
+    font-size: 0.76rem;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    color: #607D8B;
+    font-weight: 800;
+  }
+
+  .my-orders-view .orders-table td .status-select,
+  .my-orders-view .orders-table td .pay-badge {
+    justify-content: flex-start;
+  }
+
+  /* Tanks table: stack rows vertically on mobile (no horizontal scroll) */
+  .inv-tanks-wrap {
+    overflow-x: visible;
+  }
+
+  .inv-tanks-wrap .orders-table {
+    min-width: 0 !important;
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0 10px;
+  }
+
+  .inv-tanks-wrap .orders-table thead {
+    display: none;
+  }
+
+  .inv-tanks-wrap .orders-table tbody,
+  .inv-tanks-wrap .orders-table tr,
+  .inv-tanks-wrap .orders-table td {
+    display: block;
+    width: 100%;
+  }
+
+  .inv-tanks-wrap .orders-table tr {
+    border: 1px solid rgba(33, 150, 243, 0.14);
+    border-radius: 14px;
+    background: rgba(255, 255, 255, 0.92);
+    padding: 8px 10px;
+    margin-bottom: 10px;
+  }
+
+  .inv-tanks-wrap .orders-table td {
+    border-bottom: 1px solid rgba(33, 150, 243, 0.08);
+    padding: 10px 8px;
+    text-align: left !important;
+    position: relative;
+    padding-left: 42%;
+    min-height: 42px;
+  }
+
+  .inv-tanks-wrap .orders-table td:last-child {
+    border-bottom: none;
+  }
+
+  .inv-tanks-wrap .orders-table td::before {
+    content: attr(data-label);
+    position: absolute;
+    left: 8px;
+    top: 10px;
+    width: 36%;
+    font-size: 0.76rem;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    color: #607D8B;
+    font-weight: 800;
   }
 }
 

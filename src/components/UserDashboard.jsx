@@ -271,6 +271,17 @@ const UserDashboard = ({ user, onLogout }) => {
     })
   }, [activeView])
 
+  const handleClickCapture = (e) => {
+    const t = e.target
+    if (!(t instanceof Element)) return
+    if (!t.closest('button, a, [role="button"]')) return
+    const el = mainScrollRef.current
+    if (!el) return
+    requestAnimationFrame(() => {
+      el.scrollTo({ top: 0, behavior: 'auto' })
+    })
+  }
+
   const handleSubmit = (e) => {
     e.preventDefault()
 
@@ -415,6 +426,7 @@ const UserDashboard = ({ user, onLogout }) => {
       className="dashboard-container"
       data-theme={darkMode ? 'dark' : 'light'}
       data-has-sidebar="true"
+      onClickCapture={handleClickCapture}
     >
       <div className="dashboard-header">
         <div className="header-content">
@@ -721,9 +733,9 @@ const UserDashboard = ({ user, onLogout }) => {
                         </thead>
                         <tbody>
                           {todaysOrders.map((o, idx) => (
-                            <tr key={o.id}>
-                              <td className="muted">{o.time}</td>
-                              <td>
+                            <tr key={o.id} data-order={`Order ${String(idx + 1).padStart(3, '0')}`}>
+                              <td className="muted" data-label="Time">{o.time}</td>
+                              <td data-label="Product">
                                 <div className="prod-cell">
                                   <div className="prod-name">{o.product}</div>
                                   <div className="prod-sub">Order #{String(idx + 1).padStart(3, '0')}</div>
@@ -734,9 +746,9 @@ const UserDashboard = ({ user, onLogout }) => {
                                   ) : null}
                                 </div>
                               </td>
-                              <td className="num">{o.quantity}</td>
-                              <td className="num">{formatKsh(o.unitPrice)}</td>
-                              <td>
+                              <td className="num" data-label="Quantity">{o.quantity}</td>
+                              <td className="num" data-label="Amount">{formatKsh(o.unitPrice)}</td>
+                              <td data-label="Status">
                                 <select
                                   className={`status-select status-${String(o.status || 'Pending').toLowerCase()}`}
                                   value={o.status || 'Pending'}
@@ -746,7 +758,7 @@ const UserDashboard = ({ user, onLogout }) => {
                                   <option value="Paid">Paid</option>
                                 </select>
                               </td>
-                              <td>
+                              <td data-label="Payment">
                                 <span className={`pay-badge ${o.paymentMethod}`}>
                                   {o.paymentMethod === 'mpesa' ? (
                                     <img src={mpesaIcon} alt="MPESA" />
@@ -756,7 +768,7 @@ const UserDashboard = ({ user, onLogout }) => {
                                   <span>{o.paymentMethod.toUpperCase()}</span>
                                 </span>
                               </td>
-                              <td className="num strong">
+                              <td className="num strong" data-label="Total">
                                 {(o.status || 'Pending') === 'Paid' ? formatKsh(o.totalAmount) : '—'}
                               </td>
                             </tr>
@@ -796,6 +808,16 @@ const UserDashboard = ({ user, onLogout }) => {
                   if ((o.status || 'Pending') !== 'Paid') return sum
                   return sum + Number(o.totalAmount || 0)
                 }, 0)
+                const paidCashTotal = todaysOrders.reduce((sum, o) => {
+                  if ((o.status || 'Pending') !== 'Paid') return sum
+                  if (String(o.paymentMethod) !== 'cash') return sum
+                  return sum + Number(o.totalAmount || 0)
+                }, 0)
+                const paidMpesaTotal = todaysOrders.reduce((sum, o) => {
+                  if ((o.status || 'Pending') !== 'Paid') return sum
+                  if (String(o.paymentMethod) !== 'mpesa') return sum
+                  return sum + Number(o.totalAmount || 0)
+                }, 0)
 
                 const productQtyMap = new Map()
                 for (const o of todaysOrders) {
@@ -824,6 +846,16 @@ const UserDashboard = ({ user, onLogout }) => {
                         <div className="daily-card-label">Today’s Paid Total</div>
                         <div className="daily-card-value accent">{formatKsh(paidTotal)}</div>
                         <div className="daily-card-hint">Counts only orders marked as Paid</div>
+                      </div>
+                      <div className="daily-card">
+                        <div className="daily-card-label">Cash Amount</div>
+                        <div className="daily-card-value">{formatKsh(paidCashTotal)}</div>
+                        <div className="daily-card-hint">Paid orders via Cash</div>
+                      </div>
+                      <div className="daily-card">
+                        <div className="daily-card-label">MPESA Amount</div>
+                        <div className="daily-card-value">{formatKsh(paidMpesaTotal)}</div>
+                        <div className="daily-card-hint">Paid orders via MPESA</div>
                       </div>
                       <div className="daily-card">
                         <div className="daily-card-label">Number of Orders</div>
@@ -881,6 +913,14 @@ const UserDashboard = ({ user, onLogout }) => {
 
                 const paidWeekOrders = weekOrders.filter(o => (o.status || 'Pending') === 'Paid')
                 const paidTotal = paidWeekOrders.reduce((sum, o) => sum + Number(o.totalAmount || 0), 0)
+                const paidCashTotal = paidWeekOrders.reduce((sum, o) => {
+                  if (String(o.paymentMethod) !== 'cash') return sum
+                  return sum + Number(o.totalAmount || 0)
+                }, 0)
+                const paidMpesaTotal = paidWeekOrders.reduce((sum, o) => {
+                  if (String(o.paymentMethod) !== 'mpesa') return sum
+                  return sum + Number(o.totalAmount || 0)
+                }, 0)
 
                 const paidCount = paidWeekOrders.length
                 const pendingCount = weekOrders.length - paidCount
@@ -930,6 +970,16 @@ const UserDashboard = ({ user, onLogout }) => {
                         <div className="weekly-card-label">Week Paid Total</div>
                         <div className="weekly-card-value accent">{formatKsh(paidTotal)}</div>
                         <div className="weekly-card-hint">Paid-only total</div>
+                      </div>
+                      <div className="weekly-card">
+                        <div className="weekly-card-label">Cash Amount</div>
+                        <div className="weekly-card-value">{formatKsh(paidCashTotal)}</div>
+                        <div className="weekly-card-hint">Paid orders via Cash</div>
+                      </div>
+                      <div className="weekly-card">
+                        <div className="weekly-card-label">MPESA Amount</div>
+                        <div className="weekly-card-value">{formatKsh(paidMpesaTotal)}</div>
+                        <div className="weekly-card-hint">Paid orders via MPESA</div>
                       </div>
                       <div className="weekly-card">
                         <div className="weekly-card-label">Paid Orders</div>

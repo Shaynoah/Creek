@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import logo from '@src/assets/logo.png'
 import './Login.css'
 
@@ -30,8 +30,21 @@ const Login = ({ onLogin }) => {
     }
   }
 
+  useEffect(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: 'auto' })
+  }, [])
+
+  const handleClickCapture = (e) => {
+    const t = e.target
+    if (!(t instanceof Element)) return
+    if (!t.closest('button, a, [role="button"]')) return
+    requestAnimationFrame(() => {
+      window.scrollTo({ top: 0, left: 0, behavior: 'auto' })
+    })
+  }
+
   return (
-    <div className="login-container">
+    <div className="login-container" onClickCapture={handleClickCapture}>
       <div className="water-background">
         <div className="wave wave1"></div>
         <div className="wave wave2"></div>

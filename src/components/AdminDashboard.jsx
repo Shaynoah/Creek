@@ -181,6 +181,17 @@ const AdminDashboard = ({ admin, onLogout, onProfileUpdate }) => {
     })
   }, [activeView])
 
+  const handleClickCapture = (e) => {
+    const t = e.target
+    if (!(t instanceof Element)) return
+    if (!t.closest('button, a, [role="button"]')) return
+    const el = mainScrollRef.current
+    if (!el) return
+    requestAnimationFrame(() => {
+      el.scrollTo({ top: 0, behavior: 'auto' })
+    })
+  }
+
   // Date helpers and aggregations for Sales view
   const addDays = (date, days) => {
     const d = new Date(date)
@@ -286,7 +297,7 @@ const AdminDashboard = ({ admin, onLogout, onProfileUpdate }) => {
   }, [])
 
   return (
-    <div className="dashboard-container" data-has-sidebar="true">
+    <div className="dashboard-container" data-has-sidebar="true" onClickCapture={handleClickCapture}>
       <div className="dashboard-header">
         <div className="header-content">
           <div className="header-left">
@@ -326,7 +337,7 @@ const AdminDashboard = ({ admin, onLogout, onProfileUpdate }) => {
       </div>
       <div className="dashboard-layout has-sidebar">
         <aside className="dashboard-sidebar">
-          <nav className="sidebar-nav">
+          <nav className="sidebar-nav admin-nav">
             <button
               className={`nav-item ${activeView === 'dashboard' ? 'active' : ''}`}
               onClick={() => setActiveView('dashboard')}
@@ -545,27 +556,27 @@ const AdminDashboard = ({ admin, onLogout, onProfileUpdate }) => {
                           </thead>
                           <tbody>
                             {todaysOrders.map((o, idx) => (
-                              <tr key={o.id}>
-                                <td className="muted">{o.time}</td>
-                                <td>
+                              <tr key={o.id} data-order={`Order ${String(idx + 1).padStart(3, '0')}`}>
+                                <td className="muted" data-label="Time">{o.time}</td>
+                                <td data-label="Product">
                                   <div className="prod-cell">
                                     <div className="prod-name">{o.product}</div>
                                     <div className="prod-sub">Order #{String(idx + 1).padStart(3, '0')}</div>
                                   </div>
                                 </td>
-                                <td className="num">{o.quantity}</td>
-                                <td className="num">{formatKsh(o.unitPrice)}</td>
-                                <td>
+                                <td className="num" data-label="Quantity">{o.quantity}</td>
+                                <td className="num" data-label="Amount">{formatKsh(o.unitPrice)}</td>
+                                <td data-label="Status">
                                   <span className={`status-select status-${String(o.status || 'Pending').toLowerCase()}`} style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', cursor: 'default' }}>
                                     {o.status || 'Pending'}
                                   </span>
                                 </td>
-                                <td>
+                                <td data-label="Payment">
                                   <span className={`pay-badge ${o.paymentMethod}`}>
                                     <span className="pay-label">{o.paymentMethod?.toUpperCase()}</span>
                                   </span>
                                 </td>
-                                <td className="num strong">
+                                <td className="num strong" data-label="Total">
                                   {(o.status || 'Pending') === 'Paid' ? formatKsh(o.totalAmount) : '—'}
                                 </td>
                               </tr>
@@ -758,7 +769,7 @@ const AdminDashboard = ({ admin, onLogout, onProfileUpdate }) => {
                       Add Tank
                     </button>
                   </form>
-                  <div className="orders-table-wrap">
+                  <div className="orders-table-wrap inv-tanks-wrap">
                     <table className="orders-table">
                       <thead>
                         <tr><th>Name</th><th className="num">Liters</th><th>Added</th><th className="num">Actions</th></tr>
@@ -768,7 +779,7 @@ const AdminDashboard = ({ admin, onLogout, onProfileUpdate }) => {
                           <tr><td colSpan="4" className="muted" style={{ padding: 16 }}>No tanks yet</td></tr>
                         ) : tanks.map(t => (
                           <tr key={t.id}>
-                            <td>
+                            <td data-label="Name">
                               {editingTankId === t.id ? (
                                 <input
                                   className="form-input"
@@ -779,7 +790,7 @@ const AdminDashboard = ({ admin, onLogout, onProfileUpdate }) => {
                                 />
                               ) : t.name}
                             </td>
-                            <td className="num">
+                            <td className="num" data-label="Liters">
                               {editingTankId === t.id ? (
                                 <input
                                   className="form-input"
@@ -791,8 +802,8 @@ const AdminDashboard = ({ admin, onLogout, onProfileUpdate }) => {
                                 />
                               ) : `${Number(t.liters || 0).toLocaleString()} L`}
                             </td>
-                            <td>{new Date(t.addedAt).toLocaleString()}</td>
-                            <td className="num">
+                            <td data-label="Added">{new Date(t.addedAt).toLocaleString()}</td>
+                            <td className="num" data-label="Actions">
                               {editingTankId === t.id ? (
                                 <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
                                   <button
