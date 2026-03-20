@@ -35,6 +35,7 @@ const defaultBottlePricing = {
 }
 
 const ADMIN_AUTH_KEY = 'creekFreshAdminAuthV1'
+const ADMIN_DARKMODE_KEY = 'creekFreshAdminDarkModeV1'
 
 const AdminDashboard = ({ admin, onLogout, onProfileUpdate }) => {
   const [activeView, setActiveView] = useState('dashboard')
@@ -62,6 +63,13 @@ const AdminDashboard = ({ admin, onLogout, onProfileUpdate }) => {
   })
   const [profileMsg, setProfileMsg] = useState('')
   const mainScrollRef = useRef(null)
+  const [adminDarkMode, setAdminDarkMode] = useState(() => {
+    try {
+      return localStorage.getItem(ADMIN_DARKMODE_KEY) === 'true'
+    } catch {
+      return false
+    }
+  })
 
   const loadOrdersFromStorage = () => {
     try {
@@ -261,6 +269,14 @@ const AdminDashboard = ({ admin, onLogout, onProfileUpdate }) => {
     })
   }, [activeView])
 
+  useEffect(() => {
+    try {
+      localStorage.setItem(ADMIN_DARKMODE_KEY, String(adminDarkMode))
+    } catch {
+      // ignore
+    }
+  }, [adminDarkMode])
+
   const handleClickCapture = (e) => {
     const t = e.target
     if (!(t instanceof Element)) return
@@ -377,7 +393,12 @@ const AdminDashboard = ({ admin, onLogout, onProfileUpdate }) => {
   }, [])
 
   return (
-    <div className="dashboard-container" data-has-sidebar="true" onClickCapture={handleClickCapture}>
+    <div
+      className="dashboard-container"
+      data-has-sidebar="true"
+      data-theme={adminDarkMode ? 'dark' : 'light'}
+      onClickCapture={handleClickCapture}
+    >
       <div className="dashboard-header">
         <div className="header-content">
           <div className="header-left">
@@ -466,6 +487,16 @@ const AdminDashboard = ({ admin, onLogout, onProfileUpdate }) => {
             >
               <span className="nav-icon">👤</span>
               <span className="nav-text">Profile</span>
+            </button>
+
+            <button
+              type="button"
+              className="nav-item"
+              onClick={() => setAdminDarkMode(v => !v)}
+              aria-pressed={adminDarkMode}
+            >
+              <span className="nav-icon">{adminDarkMode ? '🌙' : '☀️'}</span>
+              <span className="nav-text">Dark mode</span>
             </button>
           </nav>
         </aside>

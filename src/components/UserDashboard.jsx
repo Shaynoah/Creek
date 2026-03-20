@@ -501,6 +501,60 @@ const UserDashboard = ({ user, onLogout }) => {
     })
   }
 
+  const deleteOrder = (order) => {
+    if (!order) return
+    const ok = window.confirm('Delete this order? Inventory will be restored.')
+    if (!ok) return
+
+    // Restore inventory (tanks liters + empty bottle stock) based on the order.
+    try {
+      const litersMap = { '20l': 20, '10l': 10, '5l': 5, '2l': 2, '1.5l': 1.5, '1l': 1, '500ml': 0.5 }
+      const qty = Number(order.quantity || 0)
+      const perUnitLiters = Number(litersMap[order.productId] || 0)
+      const litersToAdd = perUnitLiters * qty
+
+      if (litersToAdd > 0) {
+        const rawT = localStorage.getItem(TANKS_KEY)
+        if (rawT) {
+          const arr = JSON.parse(rawT)
+          if (Array.isArray(arr) && arr.length > 0) {
+            const nextT = arr.map(t => ({ ...t }))
+            // Without knowing which tank chunks were consumed originally, we add back to the first tank.
+            nextT[0].liters = Number(nextT[0].liters || 0) + litersToAdd
+            localStorage.setItem(TANKS_KEY, JSON.stringify(nextT))
+            saveCloudState(CLOUD_KEYS.tanks, nextT).catch(() => {})
+          }
+        }
+      }
+
+      if (order.emptyBottleSize && Number(order.emptyBottleQty || 0) > 0) {
+        const rawB = localStorage.getItem(BOTTLES_KEY)
+        const obj = rawB ? JSON.parse(rawB) : {}
+        const rec = obj[order.emptyBottleSize] || { qty: 0, price: Number(order.emptyBottleAmount || 0) / Math.max(1, Number(order.emptyBottleQty || 0)) }
+        rec.qty = Math.max(0, Number(rec.qty || 0) + Number(order.emptyBottleQty || 0))
+        obj[order.emptyBottleSize] = rec
+        localStorage.setItem(BOTTLES_KEY, JSON.stringify(obj))
+        saveCloudState(CLOUD_KEYS.bottles, obj).catch(() => {})
+      }
+    } catch {
+      // ignore restore errors to avoid blocking order deletion
+    }
+
+    setOrders(prev => {
+      const updated = prev.filter(o => o.id !== order.id)
+      try {
+        const payload = JSON.stringify(updated)
+        localStorage.setItem(ORDERS_KEY, payload)
+        localStorage.setItem(ORDERS_BACKUP_KEY, payload)
+        sessionStorage.setItem(ORDERS_SESSION_KEY, payload)
+        saveCloudState(CLOUD_KEYS.orders, updated).catch(() => {})
+      } catch {
+        // ignore
+      }
+      return updated
+    })
+  }
+
   return (
     <div
       className="dashboard-container"
@@ -577,22 +631,17 @@ const UserDashboard = ({ user, onLogout }) => {
               <span className="nav-icon">📅</span>
               <span className="nav-text">Weekly Summary</span>
             </button>
-          </nav>
 
-          <div className="sidebar-footer">
             <button
               type="button"
-              className={`theme-toggle ${darkMode ? 'on' : 'off'}`}
+              className="nav-item"
               onClick={() => setDarkMode(v => !v)}
               aria-pressed={darkMode}
             >
-              <span className="theme-icon" aria-hidden="true">{darkMode ? '🌙' : '☀️'}</span>
-              <span className="theme-text">Dark mode</span>
-              <span className="theme-switch" aria-hidden="true">
-                <span className="theme-knob"></span>
-              </span>
+              <span className="nav-icon">{darkMode ? '🌙' : '☀️'}</span>
+              <span className="nav-text">Dark mode</span>
             </button>
-          </div>
+          </nav>
         </aside>
 
         <main className="dashboard-main" ref={mainScrollRef}>
@@ -809,6 +858,7 @@ const UserDashboard = ({ user, onLogout }) => {
                             <th>Status</th>
                             <th>Payment</th>
                             <th className="num">Total</th>
+                            <th>Actions</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -850,6 +900,20 @@ const UserDashboard = ({ user, onLogout }) => {
                               </td>
                               <td className="num strong" data-label="Total">
                                 {(o.status || 'Pending') === 'Paid' ? formatKsh(o.totalAmount) : '—'}
+                              </td>
+                              <td data-label="Actions">
+                                <button
+                                  type="button"
+                                  className="snackbar-btn ghost"
+                                  style={{ padding: '8px 12px', borderRadius: 12 }}
+                                  onClick={(e) => {
+                                    e.preventDefault()
+                                    e.stopPropagation()
+                                    deleteOrder(o)
+                                  }}
+                                >
+                                  Delete
+                                </button>
                               </td>
                             </tr>
                           ))}
