@@ -388,10 +388,17 @@
   left: 0;
   bottom: 0;
   height: calc(100dvh - var(--cf-header-h));
-  overflow: hidden;
+  /* Allow desktop sidebar contents (extra admin buttons like Dark mode) to fit on shorter viewports */
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: none; /* Firefox */
   z-index: 50;
   display: flex;
   flex-direction: column;
+}
+
+.dashboard-sidebar::-webkit-scrollbar {
+  display: none; /* WebKit */
 }
 
 .dashboard-sidebar::before {
