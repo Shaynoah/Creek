@@ -3,6 +3,7 @@ import logo from '@src/assets/logo.png'
 import mpesaIcon from '@src/assets/mpesa.png'
 import cashIcon from '@src/assets/cash.png'
 import './Dashboard.css'
+import { CLOUD_KEYS, loadCloudState, saveCloudState, subscribeToAppStateChanges } from '@src/lib/cloudStore'
 
 const ORDERS_KEY = 'creekFreshOrdersV1'
 const ORDERS_BACKUP_KEY = 'creekFreshOrdersBackupV1'
@@ -152,6 +153,80 @@ const UserDashboard = ({ user, onLogout }) => {
       // ignore
     }
   }, [])
+
+  useEffect(() => {
+    let alive = true
+    const syncCloud = async () => {
+      const [cloudOrders, cloudBottles, cloudPrices] = await Promise.all([
+        loadCloudState(CLOUD_KEYS.orders),
+        loadCloudState(CLOUD_KEYS.bottles),
+        loadCloudState(CLOUD_KEYS.productPrices),
+      ])
+      if (!alive) return
+      if (Array.isArray(cloudOrders)) {
+        setOrders(cloudOrders.map(o => ({ status: 'Pending', ...o })))
+        try {
+          const payload = JSON.stringify(cloudOrders)
+          localStorage.setItem(ORDERS_KEY, payload)
+          localStorage.setItem(ORDERS_BACKUP_KEY, payload)
+          sessionStorage.setItem(ORDERS_SESSION_KEY, payload)
+        } catch {
+          // ignore
+        }
+      }
+      if (cloudBottles && typeof cloudBottles === 'object') {
+        const next = { ...defaultBottlePricing, ...cloudBottles }
+        setBottlePricing(next)
+        try { localStorage.setItem(BOTTLES_KEY, JSON.stringify(next)) } catch {}
+      }
+      if (cloudPrices && typeof cloudPrices === 'object') {
+        setProductPrices(cloudPrices)
+        try { localStorage.setItem('creekFreshProductPricesV1', JSON.stringify(cloudPrices)) } catch {}
+      }
+    }
+    syncCloud().catch(() => {})
+    return () => { alive = false }
+  }, [])
+
+  // Realtime: keep local UI in sync with cloud changes from other devices/admin.
+  useEffect(() => {
+    const unsubscribe = subscribeToAppStateChanges((p) => {
+      const row = p?.new
+      const key = row?.key
+      if (!key) return
+
+      if (key === CLOUD_KEYS.orders) {
+        const nextOrders = Array.isArray(row.payload) ? row.payload : null
+        if (!nextOrders) return
+
+        const next = nextOrders.map(o => ({ status: 'Pending', ...o }))
+        setOrders(next)
+        try {
+          const payload = JSON.stringify(nextOrders)
+          localStorage.setItem(ORDERS_KEY, payload)
+          localStorage.setItem(ORDERS_BACKUP_KEY, payload)
+          sessionStorage.setItem(ORDERS_SESSION_KEY, payload)
+        } catch {}
+      }
+
+      if (key === CLOUD_KEYS.bottles) {
+        const nextBottles = row.payload && typeof row.payload === 'object' ? row.payload : null
+        if (!nextBottles) return
+        const next = { ...defaultBottlePricing, ...nextBottles }
+        setBottlePricing(next)
+        try { localStorage.setItem(BOTTLES_KEY, JSON.stringify(next)) } catch {}
+      }
+
+      if (key === CLOUD_KEYS.productPrices) {
+        const nextPrices = row.payload && typeof row.payload === 'object' ? row.payload : null
+        if (!nextPrices) return
+        setProductPrices(nextPrices)
+        try { localStorage.setItem('creekFreshProductPricesV1', JSON.stringify(nextPrices)) } catch {}
+      }
+    })
+
+    return () => { unsubscribe?.() }
+  }, [])
   useEffect(() => {
     try {
       const raw = localStorage.getItem(BOTTLES_KEY)
@@ -232,6 +307,7 @@ const UserDashboard = ({ user, onLogout }) => {
         // keep a mirror backup and a session mirror
         localStorage.setItem(ORDERS_BACKUP_KEY, next)
         sessionStorage.setItem(ORDERS_SESSION_KEY, next)
+        saveCloudState(CLOUD_KEYS.orders, orders).catch(() => {})
       }
     } catch {
       // ignore
@@ -361,6 +437,7 @@ const UserDashboard = ({ user, onLogout }) => {
               remaining -= take
             }
             localStorage.setItem(TANKS_KEY, JSON.stringify(nextT))
+            saveCloudState(CLOUD_KEYS.tanks, nextT).catch(() => {})
           }
         }
       }
@@ -371,6 +448,7 @@ const UserDashboard = ({ user, onLogout }) => {
         rec.qty = Math.max(0, Number(rec.qty || 0) - Number(pendingOrder.emptyBottleQty || 0))
         obj[pendingOrder.emptyBottleSize] = rec
         localStorage.setItem(BOTTLES_KEY, JSON.stringify(obj))
+        saveCloudState(CLOUD_KEYS.bottles, obj).catch(() => {})
       }
     } catch {}
 
@@ -381,6 +459,7 @@ const UserDashboard = ({ user, onLogout }) => {
         localStorage.setItem(ORDERS_KEY, payload)
         localStorage.setItem(ORDERS_BACKUP_KEY, payload)
         sessionStorage.setItem(ORDERS_SESSION_KEY, payload)
+        saveCloudState(CLOUD_KEYS.orders, next).catch(() => {})
       } catch {
         // ignore
       }
@@ -414,6 +493,7 @@ const UserDashboard = ({ user, onLogout }) => {
         localStorage.setItem(ORDERS_KEY, payload)
         localStorage.setItem(ORDERS_BACKUP_KEY, payload)
         sessionStorage.setItem(ORDERS_SESSION_KEY, payload)
+        saveCloudState(CLOUD_KEYS.orders, updated).catch(() => {})
       } catch {
         // ignore
       }

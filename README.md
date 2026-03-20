@@ -31,17 +31,26 @@ The application will start on `http://localhost:5173`
 npm run build
 ```
 
-## Login Credentials
+## Supabase Setup
 
-### User
-- Just enter your name (no password needed)
+This app now supports Supabase persistence with localStorage fallback.
 
-### Admin
-- Username: `admin`
-- Password: `admin123`
+1. Create a Supabase project.
+2. In Supabase SQL Editor, run `supabase/schema.sql`.
+3. Create a `.env` file in the project root with:
+
+```bash
+VITE_SUPABASE_URL=https://YOUR-PROJECT-REF.supabase.co
+VITE_SUPABASE_ANON_KEY=YOUR_SUPABASE_ANON_KEY
+```
+
+4. Restart the dev server.
+
+If env vars are missing, the app continues using localStorage only.
 
 ## Tech Stack
 
 - React 18
 - Vite
 - CSS3 with animations
+- Supabase (Postgres + JS client)

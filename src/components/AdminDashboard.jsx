@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react'
 import logo from '@src/assets/logo.png'
 import './Dashboard.css'
+import { CLOUD_KEYS, loadCloudState, saveCloudState, subscribeToAppStateChanges } from '@src/lib/cloudStore'
 
 const ORDERS_KEY = 'creekFreshOrdersV1'
 const ORDERS_BACKUP_KEY = 'creekFreshOrdersBackupV1'
@@ -125,6 +126,7 @@ const AdminDashboard = ({ admin, onLogout, onProfileUpdate }) => {
   }
   const saveTanks = (next) => {
     try { localStorage.setItem(TANKS_KEY, JSON.stringify(next)) } catch {}
+    saveCloudState(CLOUD_KEYS.tanks, next).catch(() => {})
   }
   const loadBottles = () => {
     try {
@@ -144,6 +146,7 @@ const AdminDashboard = ({ admin, onLogout, onProfileUpdate }) => {
   }
   const saveBottles = (next) => {
     try { localStorage.setItem(BOTTLES_KEY, JSON.stringify(next)) } catch {}
+    saveCloudState(CLOUD_KEYS.bottles, next).catch(() => {})
   }
   const loadProductPrices = () => {
     try {
@@ -155,9 +158,86 @@ const AdminDashboard = ({ admin, onLogout, onProfileUpdate }) => {
   }
   const saveProductPrices = (next) => {
     try { localStorage.setItem(PRODUCTS_KEY, JSON.stringify(next)) } catch {}
+    saveCloudState(CLOUD_KEYS.productPrices, next).catch(() => {})
   }
   useEffect(() => {
     loadTanks(); loadBottles(); loadProductPrices()
+  }, [])
+
+  // Realtime: update admin UI instantly when other devices write to Supabase.
+  useEffect(() => {
+    const unsubscribe = subscribeToAppStateChanges((p) => {
+      const row = p?.new
+      const key = row?.key
+      if (!key) return
+
+      if (key === CLOUD_KEYS.orders) {
+        const nextOrders = Array.isArray(row.payload) ? row.payload : null
+        if (!nextOrders) return
+        setOrders(nextOrders.map(o => ({ status: 'Pending', ...o })))
+        try {
+          localStorage.setItem(ORDERS_KEY, JSON.stringify(nextOrders))
+          localStorage.setItem(ORDERS_BACKUP_KEY, JSON.stringify(nextOrders))
+          sessionStorage.setItem(ORDERS_SESSION_KEY, JSON.stringify(nextOrders))
+        } catch {}
+      }
+
+      if (key === CLOUD_KEYS.tanks) {
+        const nextTanks = Array.isArray(row.payload) ? row.payload : null
+        if (!nextTanks) return
+        setTanks(nextTanks)
+        try { localStorage.setItem(TANKS_KEY, JSON.stringify(nextTanks)) } catch {}
+      }
+
+      if (key === CLOUD_KEYS.bottles) {
+        const nextBottles = row.payload && typeof row.payload === 'object' ? row.payload : null
+        if (!nextBottles) return
+        const next = { ...defaultBottlePricing, ...nextBottles }
+        setBottles(next)
+        try { localStorage.setItem(BOTTLES_KEY, JSON.stringify(next)) } catch {}
+      }
+
+      if (key === CLOUD_KEYS.productPrices) {
+        const nextPrices = row.payload && typeof row.payload === 'object' ? row.payload : null
+        if (!nextPrices) return
+        setProductPrices(nextPrices)
+        try { localStorage.setItem(PRODUCTS_KEY, JSON.stringify(nextPrices)) } catch {}
+      }
+    })
+
+    return () => { unsubscribe?.() }
+  }, [])
+
+  useEffect(() => {
+    let alive = true
+    const syncCloud = async () => {
+      const [cloudOrders, cloudTanks, cloudBottles, cloudPrices] = await Promise.all([
+        loadCloudState(CLOUD_KEYS.orders),
+        loadCloudState(CLOUD_KEYS.tanks),
+        loadCloudState(CLOUD_KEYS.bottles),
+        loadCloudState(CLOUD_KEYS.productPrices),
+      ])
+      if (!alive) return
+      if (Array.isArray(cloudOrders)) {
+        setOrders(cloudOrders.map(o => ({ status: 'Pending', ...o })))
+        try { localStorage.setItem(ORDERS_KEY, JSON.stringify(cloudOrders)) } catch {}
+      }
+      if (Array.isArray(cloudTanks)) {
+        setTanks(cloudTanks)
+        try { localStorage.setItem(TANKS_KEY, JSON.stringify(cloudTanks)) } catch {}
+      }
+      if (cloudBottles && typeof cloudBottles === 'object') {
+        const next = { ...defaultBottlePricing, ...cloudBottles }
+        setBottles(next)
+        try { localStorage.setItem(BOTTLES_KEY, JSON.stringify(next)) } catch {}
+      }
+      if (cloudPrices && typeof cloudPrices === 'object') {
+        setProductPrices(p => ({ ...p, ...cloudPrices }))
+        try { localStorage.setItem(PRODUCTS_KEY, JSON.stringify(cloudPrices)) } catch {}
+      }
+    }
+    syncCloud().catch(() => {})
+    return () => { alive = false }
   }, [])
 
   useEffect(() => {
@@ -1252,18 +1332,23 @@ const AdminDashboard = ({ admin, onLogout, onProfileUpdate }) => {
                             password: desiredPassword || currentPass,
                           }
                           localStorage.setItem(ADMIN_AUTH_KEY, JSON.stringify(updated))
+                          saveCloudState(CLOUD_KEYS.adminAuth, updated).catch(() => {})
                         } else {
-                          localStorage.setItem(ADMIN_AUTH_KEY, JSON.stringify({
+                          const fallbackAuth = {
                             username: nextUsername,
                             password: desiredPassword || String(profileForm.currentPassword || ''),
-                          }))
+                          }
+                          localStorage.setItem(ADMIN_AUTH_KEY, JSON.stringify(fallbackAuth))
+                          saveCloudState(CLOUD_KEYS.adminAuth, fallbackAuth).catch(() => {})
                         }
                       } else {
                         // First-time setup if no admin credentials exist yet
-                        localStorage.setItem(ADMIN_AUTH_KEY, JSON.stringify({
+                        const firstAuth = {
                           username: nextUsername,
                           password: desiredPassword || String(profileForm.currentPassword || ''),
-                        }))
+                        }
+                        localStorage.setItem(ADMIN_AUTH_KEY, JSON.stringify(firstAuth))
+                        saveCloudState(CLOUD_KEYS.adminAuth, firstAuth).catch(() => {})
                       }
                       onProfileUpdate?.({ username: nextUsername })
                       setProfileForm(p => ({ ...p, currentPassword: '', newPassword: '', confirmPassword: '' }))

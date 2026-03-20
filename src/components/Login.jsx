@@ -1,14 +1,43 @@
 import React, { useEffect, useState } from 'react'
 import logo from '@src/assets/logo.png'
 import './Login.css'
+import { CLOUD_KEYS, loadCloudState } from '@src/lib/cloudStore'
 
 const Login = ({ onLogin }) => {
+  const ADMIN_AUTH_KEY = 'creekFreshAdminAuthV1'
   const brandText = 'CREEK FRESH'
   const [loginType, setLoginType] = useState('user') // 'user' or 'admin'
   const [name, setName] = useState('')
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
+  const [adminAuth, setAdminAuth] = useState(null)
+
+  useEffect(() => {
+    let alive = true
+    const loadAdminAuth = async () => {
+      try {
+        const cloud = await loadCloudState(CLOUD_KEYS.adminAuth)
+        if (alive && cloud && typeof cloud === 'object') {
+          setAdminAuth(cloud)
+          localStorage.setItem(ADMIN_AUTH_KEY, JSON.stringify(cloud))
+          return
+        }
+      } catch {
+        // ignore
+      }
+      try {
+        const raw = localStorage.getItem(ADMIN_AUTH_KEY)
+        if (!raw || !alive) return
+        const parsed = JSON.parse(raw)
+        if (parsed && typeof parsed === 'object') setAdminAuth(parsed)
+      } catch {
+        // ignore
+      }
+    }
+    loadAdminAuth().catch(() => {})
+    return () => { alive = false }
+  }, [])
 
   const handleSubmit = (e) => {
     e.preventDefault()
@@ -25,7 +54,13 @@ const Login = ({ onLogin }) => {
         setError('Please enter both username and password')
         return
       }
-      // Restriction removed: allow any non-empty admin credentials for now
+      // If credentials are configured, validate against them; otherwise allow bootstrap login.
+      if (adminAuth?.username && adminAuth?.password) {
+        if (username.trim() !== String(adminAuth.username) || password !== String(adminAuth.password)) {
+          setError('Invalid admin username or password')
+          return
+        }
+      }
       onLogin({ username: username.trim() }, 'admin')
     }
   }
