@@ -13,6 +13,26 @@ const toLocalDateKey = (d) => {
 
 const formatKsh = (amount) => `KSh ${Number(amount || 0).toLocaleString()}`
 
+const getOrderDateKey = (order) => {
+  if (!order || typeof order !== 'object') return null
+  if (typeof order.dateKey === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(order.dateKey)) {
+    return order.dateKey
+  }
+  if (order.timestamp) {
+    const k = toLocalDateKey(order.timestamp)
+    if (k && k !== 'Invalid Date') return k
+  }
+  if (order.date) {
+    const k = toLocalDateKey(order.date)
+    if (k && k !== 'Invalid Date') return k
+  }
+  if (order.dateTime) {
+    const k = toLocalDateKey(order.dateTime)
+    if (k && k !== 'Invalid Date') return k
+  }
+  return null
+}
+
 // Inventory storage keys
 const TANKS_KEY = 'creekFreshInvTanksV1'
 const BOTTLES_KEY = 'creekFreshInvBottlesV1'
@@ -71,47 +91,38 @@ const AdminDashboard = ({ admin, onLogout, onProfileUpdate }) => {
     }
   })
 
+  const parseStoredOrders = (raw) => {
+    try {
+      const parsed = JSON.parse(raw)
+      return Array.isArray(parsed) ? parsed : null
+    } catch {
+      return null
+    }
+  }
+
+  const loadBestLocalOrdersSnapshot = () => {
+    try {
+      const primary = parseStoredOrders(localStorage.getItem(ORDERS_KEY) || 'null') || []
+      const backup = parseStoredOrders(localStorage.getItem(ORDERS_BACKUP_KEY) || 'null') || []
+      const session = parseStoredOrders(sessionStorage.getItem(ORDERS_SESSION_KEY) || 'null') || []
+      const candidates = [primary, backup, session]
+      return candidates.reduce((acc, cur) => (cur.length > acc.length ? cur : acc), [])
+    } catch {
+      return []
+    }
+  }
+
   const loadOrdersFromStorage = () => {
     try {
-      let raw = localStorage.getItem(ORDERS_KEY)
-      if (!raw) {
-        // Attempt restore from backup
-        const backup = localStorage.getItem(ORDERS_BACKUP_KEY)
-        if (backup) {
-          try {
-            const parsedBackup = JSON.parse(backup)
-            if (Array.isArray(parsedBackup)) {
-              localStorage.setItem(ORDERS_KEY, backup)
-              raw = backup
-            }
-          } catch {
-            // ignore
-          }
-        } else {
-          // Attempt restore from session mirror
-          const sessionRaw = sessionStorage.getItem(ORDERS_SESSION_KEY)
-          if (sessionRaw) {
-            try {
-              const parsedSession = JSON.parse(sessionRaw)
-              if (Array.isArray(parsedSession)) {
-                localStorage.setItem(ORDERS_KEY, sessionRaw)
-                raw = sessionRaw
-              }
-            } catch {
-              // ignore
-            }
-          }
-        }
-        if (!raw) {
-          setOrders([])
-          return
-        }
-      }
-      const parsed = JSON.parse(raw)
-      if (!Array.isArray(parsed)) {
+      const parsed = loadBestLocalOrdersSnapshot()
+      if (!Array.isArray(parsed) || parsed.length === 0) {
         setOrders([])
         return
       }
+      const payload = JSON.stringify(parsed)
+      localStorage.setItem(ORDERS_KEY, payload)
+      localStorage.setItem(ORDERS_BACKUP_KEY, payload)
+      sessionStorage.setItem(ORDERS_SESSION_KEY, payload)
       setOrders(parsed.map(o => ({ status: 'Pending', ...o })))
     } catch {
       // ignore
@@ -219,6 +230,7 @@ const AdminDashboard = ({ admin, onLogout, onProfileUpdate }) => {
   useEffect(() => {
     let alive = true
     const syncCloud = async () => {
+      const localBest = loadBestLocalOrdersSnapshot()
       const [cloudOrders, cloudTanks, cloudBottles, cloudPrices] = await Promise.all([
         loadCloudState(CLOUD_KEYS.orders),
         loadCloudState(CLOUD_KEYS.tanks),
@@ -226,9 +238,24 @@ const AdminDashboard = ({ admin, onLogout, onProfileUpdate }) => {
         loadCloudState(CLOUD_KEYS.productPrices),
       ])
       if (!alive) return
-      if (Array.isArray(cloudOrders)) {
+      if (Array.isArray(cloudOrders) && cloudOrders.length > 0) {
         setOrders(cloudOrders.map(o => ({ status: 'Pending', ...o })))
-        try { localStorage.setItem(ORDERS_KEY, JSON.stringify(cloudOrders)) } catch {}
+        try {
+          const payload = JSON.stringify(cloudOrders)
+          localStorage.setItem(ORDERS_KEY, payload)
+          localStorage.setItem(ORDERS_BACKUP_KEY, payload)
+          sessionStorage.setItem(ORDERS_SESSION_KEY, payload)
+        } catch {}
+      } else if (Array.isArray(localBest) && localBest.length > 0) {
+        // Cloud looks empty but local backup/session still has orders; recover cloud from local.
+        setOrders(localBest.map(o => ({ status: 'Pending', ...o })))
+        try {
+          const payload = JSON.stringify(localBest)
+          localStorage.setItem(ORDERS_KEY, payload)
+          localStorage.setItem(ORDERS_BACKUP_KEY, payload)
+          sessionStorage.setItem(ORDERS_SESSION_KEY, payload)
+        } catch {}
+        saveCloudState(CLOUD_KEYS.orders, localBest).catch(() => {})
       }
       if (Array.isArray(cloudTanks)) {
         setTanks(cloudTanks)
@@ -317,9 +344,8 @@ const AdminDashboard = ({ admin, onLogout, onProfileUpdate }) => {
     const startKey = toLocalDateKey(start)
     const endKey = toLocalDateKey(end)
     const inRangePaid = orders.filter(o => {
-      const k = (o.dateKey || toLocalDateKey(o.timestamp))
+      const k = getOrderDateKey(o)
       if (!k) return false
-      if ((o.status || 'Pending') !== 'Paid') return false
       return k >= startKey && k <= endKey
     })
     let cash = 0
@@ -337,9 +363,8 @@ const AdminDashboard = ({ admin, onLogout, onProfileUpdate }) => {
     let mpesa = 0
     let count = 0
     for (const o of orders) {
-      const k = (o.dateKey || toLocalDateKey(o.timestamp))
+      const k = getOrderDateKey(o)
       if (k !== dateKey) continue
-      if ((o.status || 'Pending') !== 'Paid') continue
       const amt = Number(o.totalAmount || 0)
       if (String(o.paymentMethod) === 'mpesa') mpesa += amt
       else cash += amt
@@ -658,6 +683,7 @@ const AdminDashboard = ({ admin, onLogout, onProfileUpdate }) => {
                             <tr>
                               <th>Time</th>
                               <th>Product</th>
+                              <th>User</th>
                               <th className="num">Qty</th>
                               <th className="num">Amount</th>
                               <th>Status</th>
@@ -674,6 +700,9 @@ const AdminDashboard = ({ admin, onLogout, onProfileUpdate }) => {
                                     <div className="prod-name">{o.product}</div>
                                     <div className="prod-sub">Order #{String(idx + 1).padStart(3, '0')}</div>
                                   </div>
+                                </td>
+                                <td data-label="User">
+                                  {o.username || o.customerName || o.customer || '—'}
                                 </td>
                                 <td className="num" data-label="Quantity">{o.quantity}</td>
                                 <td className="num" data-label="Amount">{formatKsh(o.unitPrice)}</td>
@@ -747,7 +776,7 @@ const AdminDashboard = ({ admin, onLogout, onProfileUpdate }) => {
                       <div className="weekly-header">
                         <div>
                           <h2>Sales</h2>
-                          <p className="weekly-subtitle">Daily, Weekly and Monthly breakdowns (Paid-only)</p>
+                          <p className="weekly-subtitle">Daily, Weekly and Monthly breakdowns (all recorded orders)</p>
                         </div>
                       </div>
 
@@ -766,7 +795,7 @@ const AdminDashboard = ({ admin, onLogout, onProfileUpdate }) => {
                         <div className="weekly-card card-total">
                           <div className="weekly-card-label">Daily Total</div>
                           <div className="weekly-card-value accent">{formatKsh(daily.total)}</div>
-                          <div className="weekly-card-hint">Paid-only</div>
+                          <div className="weekly-card-hint">All recorded orders</div>
                         </div>
                       </div>
 

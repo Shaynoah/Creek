@@ -32,6 +32,7 @@ const UserDashboard = ({ user, onLogout }) => {
   const [pendingOrder, setPendingOrder] = useState(null)
   const snackbarTimerRef = useRef(null)
   const ordersLoadedRef = useRef(false)
+  const initialCloudSyncDoneRef = useRef(false)
   const mainScrollRef = useRef(null)
   const [snackbar, setSnackbar] = useState({
     open: false,
@@ -70,9 +71,72 @@ const UserDashboard = ({ user, onLogout }) => {
 
   const formatKsh = (amount) => `KSh ${Number(amount || 0).toLocaleString()}`
 
+  const parseStoredOrders = (raw) => {
+    try {
+      const parsed = JSON.parse(raw)
+      return Array.isArray(parsed) ? parsed : null
+    } catch {
+      return null
+    }
+  }
+
+  const loadBestLocalOrdersSnapshot = () => {
+    try {
+      const primary = parseStoredOrders(localStorage.getItem(ORDERS_KEY) || 'null') || []
+      const backup = parseStoredOrders(localStorage.getItem(ORDERS_BACKUP_KEY) || 'null') || []
+      const session = parseStoredOrders(sessionStorage.getItem(ORDERS_SESSION_KEY) || 'null') || []
+      const candidates = [primary, backup, session]
+      const best = candidates.reduce((acc, cur) => (cur.length > acc.length ? cur : acc), [])
+      return best
+    } catch {
+      return []
+    }
+  }
+
   const toLocalDateKey = (d) => {
     // YYYY-MM-DD in the user's local timezone
     return new Date(d).toLocaleDateString('en-CA')
+  }
+
+  const getOrderDateKey = (order) => {
+    if (!order || typeof order !== 'object') return null
+    if (typeof order.dateKey === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(order.dateKey)) {
+      return order.dateKey
+    }
+    if (order.timestamp) {
+      const k = toLocalDateKey(order.timestamp)
+      if (k && k !== 'Invalid Date') return k
+    }
+    if (order.date) {
+      const k = toLocalDateKey(order.date)
+      if (k && k !== 'Invalid Date') return k
+    }
+    if (order.dateTime) {
+      const k = toLocalDateKey(order.dateTime)
+      if (k && k !== 'Invalid Date') return k
+    }
+    return null
+  }
+
+  const getOrderTimeValue = (order) => {
+    const candidates = [order?.timestamp, order?.dateTime, order?.date]
+    for (const value of candidates) {
+      if (!value) continue
+      const t = new Date(value).getTime()
+      if (Number.isFinite(t)) return t
+    }
+    return 0
+  }
+
+  const getOrderUsername = (order) => {
+    const raw = order?.username ?? order?.customerName ?? order?.customer ?? ''
+    return String(raw).trim().toLowerCase()
+  }
+
+  const currentUsername = String(user?.name || '').trim().toLowerCase()
+  const isOrderForCurrentUser = (order) => {
+    if (!currentUsername) return true
+    return getOrderUsername(order) === currentUsername
   }
 
   const getStartOfWeek = (date) => {
@@ -157,13 +221,14 @@ const UserDashboard = ({ user, onLogout }) => {
   useEffect(() => {
     let alive = true
     const syncCloud = async () => {
+      const localBest = loadBestLocalOrdersSnapshot()
       const [cloudOrders, cloudBottles, cloudPrices] = await Promise.all([
         loadCloudState(CLOUD_KEYS.orders),
         loadCloudState(CLOUD_KEYS.bottles),
         loadCloudState(CLOUD_KEYS.productPrices),
       ])
       if (!alive) return
-      if (Array.isArray(cloudOrders)) {
+      if (Array.isArray(cloudOrders) && cloudOrders.length > 0) {
         setOrders(cloudOrders.map(o => ({ status: 'Pending', ...o })))
         try {
           const payload = JSON.stringify(cloudOrders)
@@ -173,6 +238,20 @@ const UserDashboard = ({ user, onLogout }) => {
         } catch {
           // ignore
         }
+        ordersLoadedRef.current = true
+      } else if (Array.isArray(localBest) && localBest.length > 0) {
+        // Cloud is empty but we still have local backup/session orders: restore cloud from local best snapshot.
+        setOrders(localBest.map(o => ({ status: 'Pending', ...o })))
+        try {
+          const payload = JSON.stringify(localBest)
+          localStorage.setItem(ORDERS_KEY, payload)
+          localStorage.setItem(ORDERS_BACKUP_KEY, payload)
+          sessionStorage.setItem(ORDERS_SESSION_KEY, payload)
+        } catch {
+          // ignore
+        }
+        saveCloudState(CLOUD_KEYS.orders, localBest).catch(() => {})
+        ordersLoadedRef.current = true
       }
       if (cloudBottles && typeof cloudBottles === 'object') {
         const next = { ...defaultBottlePricing, ...cloudBottles }
@@ -182,6 +261,13 @@ const UserDashboard = ({ user, onLogout }) => {
       if (cloudPrices && typeof cloudPrices === 'object') {
         setProductPrices(cloudPrices)
         try { localStorage.setItem('creekFreshProductPricesV1', JSON.stringify(cloudPrices)) } catch {}
+      }
+
+      // If cloud had no orders and local also didn't load valid orders,
+      // allow future writes now (prevents startup empty-overwrite race).
+      initialCloudSyncDoneRef.current = true
+      if (!ordersLoadedRef.current) {
+        ordersLoadedRef.current = true
       }
     }
     syncCloud().catch(() => {})
@@ -247,50 +333,17 @@ const UserDashboard = ({ user, onLogout }) => {
 
   useEffect(() => {
     try {
-      let raw = localStorage.getItem(ORDERS_KEY)
-      if (!raw) {
-        // Attempt restore from backup if primary missing
-        const backup = localStorage.getItem(ORDERS_BACKUP_KEY)
-        if (backup) {
-          try {
-            const parsedBackup = JSON.parse(backup)
-            if (Array.isArray(parsedBackup)) {
-              localStorage.setItem(ORDERS_KEY, backup)
-              raw = backup
-            }
-          } catch {
-            // ignore
-          }
-        } else {
-          // Attempt restore from sessionStorage mirror
-          const sessionRaw = sessionStorage.getItem(ORDERS_SESSION_KEY)
-          if (sessionRaw) {
-            try {
-              const parsedSession = JSON.parse(sessionRaw)
-              if (Array.isArray(parsedSession)) {
-                localStorage.setItem(ORDERS_KEY, sessionRaw)
-                raw = sessionRaw
-              }
-            } catch {
-              // ignore
-            }
-          }
-        }
-        if (!raw) {
-          ordersLoadedRef.current = true
-          return
-        }
-      }
-      const parsed = JSON.parse(raw)
-      if (!Array.isArray(parsed)) {
-        ordersLoadedRef.current = true
-        return
-      }
+      const parsed = loadBestLocalOrdersSnapshot()
+      if (!Array.isArray(parsed) || parsed.length === 0) return
       // Backfill status for older saved orders
       setOrders(parsed.map(o => ({
         status: 'Pending',
         ...o,
       })))
+      const payload = JSON.stringify(parsed)
+      localStorage.setItem(ORDERS_KEY, payload)
+      localStorage.setItem(ORDERS_BACKUP_KEY, payload)
+      sessionStorage.setItem(ORDERS_SESSION_KEY, payload)
       ordersLoadedRef.current = true
     } catch {
       // ignore
@@ -298,7 +351,7 @@ const UserDashboard = ({ user, onLogout }) => {
   }, [])
 
   useEffect(() => {
-    if (!ordersLoadedRef.current) return
+    if (!ordersLoadedRef.current || !initialCloudSyncDoneRef.current) return
     try {
       const next = JSON.stringify(orders)
       const current = localStorage.getItem(ORDERS_KEY)
@@ -401,6 +454,9 @@ const UserDashboard = ({ user, onLogout }) => {
       dateTime: dateTime,
       timestamp: now.toISOString(),
       dateKey: now.toLocaleDateString('en-CA'),
+      // Username/name of the customer who made the order (used by admin views).
+      username: user.name,
+      // Backward compatibility for already saved orders in localStorage/Supabase.
       customerName: user.name,
       emptyBottleSize: formData.emptyBottleSize || '',
       emptyBottleQty: emptyBottleQtyInt,
@@ -828,9 +884,10 @@ const UserDashboard = ({ user, onLogout }) => {
               {(() => {
                 const todayKey = toLocalDateKey(new Date())
                 const todaysOrders = orders
-                  .filter(o => (o.dateKey || toLocalDateKey(o.timestamp)) === todayKey)
+                  .filter(o => isOrderForCurrentUser(o))
+                  .filter(o => getOrderDateKey(o) === todayKey)
                   .slice()
-                  .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp))
+                  .sort((a, b) => getOrderTimeValue(a) - getOrderTimeValue(b))
                 const todaysTotal = todaysOrders.reduce((sum, o) => {
                   if ((o.status || 'Pending') !== 'Paid') return sum
                   return sum + Number(o.totalAmount || 0)
@@ -943,22 +1000,20 @@ const UserDashboard = ({ user, onLogout }) => {
               {(() => {
                 const todayKey = toLocalDateKey(new Date())
                 const todaysOrders = orders
-                  .filter(o => (o.dateKey || toLocalDateKey(o.timestamp)) === todayKey)
+                  .filter(o => isOrderForCurrentUser(o))
+                  .filter(o => getOrderDateKey(o) === todayKey)
                   .slice()
-                  .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp))
+                  .sort((a, b) => getOrderTimeValue(a) - getOrderTimeValue(b))
 
                 const orderCount = todaysOrders.length
-                const paidTotal = todaysOrders.reduce((sum, o) => {
-                  if ((o.status || 'Pending') !== 'Paid') return sum
+                const totalSales = todaysOrders.reduce((sum, o) => {
                   return sum + Number(o.totalAmount || 0)
                 }, 0)
-                const paidCashTotal = todaysOrders.reduce((sum, o) => {
-                  if ((o.status || 'Pending') !== 'Paid') return sum
+                const cashTotal = todaysOrders.reduce((sum, o) => {
                   if (String(o.paymentMethod) !== 'cash') return sum
                   return sum + Number(o.totalAmount || 0)
                 }, 0)
-                const paidMpesaTotal = todaysOrders.reduce((sum, o) => {
-                  if ((o.status || 'Pending') !== 'Paid') return sum
+                const mpesaTotal = todaysOrders.reduce((sum, o) => {
                   if (String(o.paymentMethod) !== 'mpesa') return sum
                   return sum + Number(o.totalAmount || 0)
                 }, 0)
@@ -987,19 +1042,19 @@ const UserDashboard = ({ user, onLogout }) => {
 
                     <div className="daily-cards">
                       <div className="daily-card">
-                        <div className="daily-card-label">Today’s Paid Total</div>
-                        <div className="daily-card-value accent">{formatKsh(paidTotal)}</div>
-                        <div className="daily-card-hint">Counts only orders marked as Paid</div>
+                        <div className="daily-card-label">Today’s Sales Total</div>
+                        <div className="daily-card-value accent">{formatKsh(totalSales)}</div>
+                        <div className="daily-card-hint">All recorded orders today</div>
                       </div>
                       <div className="daily-card">
                         <div className="daily-card-label">Cash Amount</div>
-                        <div className="daily-card-value">{formatKsh(paidCashTotal)}</div>
-                        <div className="daily-card-hint">Paid orders via Cash</div>
+                        <div className="daily-card-value">{formatKsh(cashTotal)}</div>
+                        <div className="daily-card-hint">All cash orders today</div>
                       </div>
                       <div className="daily-card">
                         <div className="daily-card-label">MPESA Amount</div>
-                        <div className="daily-card-value">{formatKsh(paidMpesaTotal)}</div>
-                        <div className="daily-card-hint">Paid orders via MPESA</div>
+                        <div className="daily-card-value">{formatKsh(mpesaTotal)}</div>
+                        <div className="daily-card-hint">All MPESA orders today</div>
                       </div>
                       <div className="daily-card">
                         <div className="daily-card-label">Number of Orders</div>
@@ -1048,29 +1103,31 @@ const UserDashboard = ({ user, onLogout }) => {
                 const endKey = toLocalDateKey(weekEnd)
 
                 const weekOrders = orders
+                  .filter(o => isOrderForCurrentUser(o))
                   .filter(o => {
-                    const k = toLocalDateKey(o.timestamp)
+                    const k = getOrderDateKey(o)
+                    if (!k) return false
                     return k >= startKey && k <= endKey
                   })
                   .slice()
-                  .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp))
+                  .sort((a, b) => getOrderTimeValue(a) - getOrderTimeValue(b))
 
-                const paidWeekOrders = weekOrders.filter(o => (o.status || 'Pending') === 'Paid')
-                const paidTotal = paidWeekOrders.reduce((sum, o) => sum + Number(o.totalAmount || 0), 0)
-                const paidCashTotal = paidWeekOrders.reduce((sum, o) => {
+                const weekTotal = weekOrders.reduce((sum, o) => sum + Number(o.totalAmount || 0), 0)
+                const weekCashTotal = weekOrders.reduce((sum, o) => {
                   if (String(o.paymentMethod) !== 'cash') return sum
                   return sum + Number(o.totalAmount || 0)
                 }, 0)
-                const paidMpesaTotal = paidWeekOrders.reduce((sum, o) => {
+                const weekMpesaTotal = weekOrders.reduce((sum, o) => {
                   if (String(o.paymentMethod) !== 'mpesa') return sum
                   return sum + Number(o.totalAmount || 0)
                 }, 0)
 
+                const paidWeekOrders = weekOrders.filter(o => (o.status || 'Pending') === 'Paid')
                 const paidCount = paidWeekOrders.length
                 const pendingCount = weekOrders.length - paidCount
 
                 const productQtyMap = new Map()
-                for (const o of paidWeekOrders) {
+                for (const o of weekOrders) {
                   const name = o.product || 'Unknown'
                   const qty = Number(o.quantity || 0)
                   productQtyMap.set(name, (productQtyMap.get(name) || 0) + qty)
@@ -1085,8 +1142,8 @@ const UserDashboard = ({ user, onLogout }) => {
                   const d = addDays(weekStart, i)
                   const k = toLocalDateKey(d)
                   const label = d.toLocaleDateString('en-US', { weekday: 'short' })
-                  const total = paidWeekOrders.reduce((sum, o) => {
-                    if (toLocalDateKey(o.timestamp) !== k) return sum
+                  const total = weekOrders.reduce((sum, o) => {
+                    if (getOrderDateKey(o) !== k) return sum
                     return sum + Number(o.totalAmount || 0)
                   }, 0)
                   dayTotals.push({ k, label, total })
@@ -1111,19 +1168,19 @@ const UserDashboard = ({ user, onLogout }) => {
 
                     <div className="weekly-cards">
                       <div className="weekly-card">
-                        <div className="weekly-card-label">Week Paid Total</div>
-                        <div className="weekly-card-value accent">{formatKsh(paidTotal)}</div>
-                        <div className="weekly-card-hint">Paid-only total</div>
+                        <div className="weekly-card-label">Week Sales Total</div>
+                        <div className="weekly-card-value accent">{formatKsh(weekTotal)}</div>
+                        <div className="weekly-card-hint">All orders in this week</div>
                       </div>
                       <div className="weekly-card">
                         <div className="weekly-card-label">Cash Amount</div>
-                        <div className="weekly-card-value">{formatKsh(paidCashTotal)}</div>
-                        <div className="weekly-card-hint">Paid orders via Cash</div>
+                        <div className="weekly-card-value">{formatKsh(weekCashTotal)}</div>
+                        <div className="weekly-card-hint">All cash orders in this week</div>
                       </div>
                       <div className="weekly-card">
                         <div className="weekly-card-label">MPESA Amount</div>
-                        <div className="weekly-card-value">{formatKsh(paidMpesaTotal)}</div>
-                        <div className="weekly-card-hint">Paid orders via MPESA</div>
+                        <div className="weekly-card-value">{formatKsh(weekMpesaTotal)}</div>
+                        <div className="weekly-card-hint">All MPESA orders in this week</div>
                       </div>
                       <div className="weekly-card">
                         <div className="weekly-card-label">Paid Orders</div>
@@ -1138,7 +1195,7 @@ const UserDashboard = ({ user, onLogout }) => {
                     </div>
 
                     <div className="weekly-breakdown">
-                      <div className="weekly-breakdown-title">Paid totals by day</div>
+                      <div className="weekly-breakdown-title">Sales totals by day</div>
                       <div className="weekly-breakdown-grid">
                         {dayTotals.map(d => (
                           <div key={d.k} className="week-day">
