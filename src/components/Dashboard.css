@@ -2825,6 +2825,43 @@
     font-size: 0.8rem;
   }
 
+  /* Dark mode mobile contrast fixes for stacked order/tank cards */
+  .dashboard-container[data-theme="dark"] .my-orders-view .orders-table tr,
+  .dashboard-container[data-theme="dark"] .inv-tanks-wrap .orders-table tr {
+    background: rgba(2, 6, 23, 0.68);
+    border-color: rgba(148, 163, 184, 0.24);
+  }
+
+  .dashboard-container[data-theme="dark"] .my-orders-view .orders-table td,
+  .dashboard-container[data-theme="dark"] .inv-tanks-wrap .orders-table td {
+    color: rgba(226, 232, 240, 0.95);
+    border-bottom-color: rgba(148, 163, 184, 0.14);
+  }
+
+  .dashboard-container[data-theme="dark"] .my-orders-view .orders-table td::before,
+  .dashboard-container[data-theme="dark"] .inv-tanks-wrap .orders-table td::before {
+    color: rgba(186, 230, 253, 0.9);
+  }
+
+  .dashboard-container[data-theme="dark"] .my-orders-view .orders-table tr::before {
+    color: rgba(224, 242, 254, 0.98);
+    background: rgba(2, 132, 199, 0.24);
+    border-color: rgba(125, 211, 252, 0.34);
+  }
+
+  .dashboard-container[data-theme="dark"] .weekly-summary-view .orders-pill {
+    background: rgba(2, 6, 23, 0.55);
+    border-color: rgba(148, 163, 184, 0.24);
+  }
+
+  .dashboard-container[data-theme="dark"] .weekly-summary-view .orders-pill .pill-label {
+    color: rgba(186, 230, 253, 0.85);
+  }
+
+  .dashboard-container[data-theme="dark"] .weekly-summary-view .orders-pill .pill-value {
+    color: rgba(226, 232, 240, 0.96);
+  }
+
   /* Tanks table: stack rows vertically on mobile (no horizontal scroll) */
   .inv-tanks-wrap {
     overflow-x: visible;
