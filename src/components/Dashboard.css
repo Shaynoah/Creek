@@ -2787,6 +2787,44 @@
     justify-content: flex-start;
   }
 
+  /* New summary range controls: stack pills/selects cleanly on small screens */
+  .weekly-summary-view .orders-meta {
+    width: 100%;
+    flex-direction: column;
+    gap: 10px;
+    margin-top: 8px;
+  }
+
+  .weekly-summary-view .orders-pill {
+    width: 100%;
+    min-width: 0 !important;
+    align-items: flex-start;
+  }
+
+  .weekly-summary-view .orders-pill .pill-value {
+    width: 100%;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    text-align: left;
+  }
+
+  .weekly-summary-view .orders-pill .form-select {
+    width: 100%;
+    min-height: 48px;
+    font-size: 0.98rem;
+    padding: 10px 12px;
+    padding-right: 34px;
+    background-position: right 10px center;
+  }
+
+  /* New split sections in My/All Orders */
+  .my-orders-view .weekly-breakdown-title {
+    margin-top: 4px;
+    margin-bottom: 8px;
+    font-size: 0.8rem;
+  }
+
   /* Tanks table: stack rows vertically on mobile (no horizontal scroll) */
   .inv-tanks-wrap {
     overflow-x: visible;

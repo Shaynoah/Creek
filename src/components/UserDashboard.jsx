@@ -29,6 +29,7 @@ const UserDashboard = ({ user, onLogout }) => {
     emptyBottleQty: ''
   })
   const [orders, setOrders] = useState([])
+  const [summaryRange, setSummaryRange] = useState('this-week')
   const [pendingOrder, setPendingOrder] = useState(null)
   const snackbarTimerRef = useRef(null)
   const ordersLoadedRef = useRef(false)
@@ -883,17 +884,26 @@ const UserDashboard = ({ user, onLogout }) => {
 
               {(() => {
                 const todayKey = toLocalDateKey(new Date())
-                const todaysOrders = orders
+                const myOrders = orders
                   .filter(o => isOrderForCurrentUser(o))
-                  .filter(o => getOrderDateKey(o) === todayKey)
                   .slice()
                   .sort((a, b) => getOrderTimeValue(a) - getOrderTimeValue(b))
-                const todaysTotal = todaysOrders.reduce((sum, o) => {
+
+                // Keep unpaid orders visible across days until marked as Paid.
+                const todaysOrders = myOrders.filter(o => getOrderDateKey(o) === todayKey)
+                const carryPendingOrders = myOrders.filter(o => {
+                  const isToday = getOrderDateKey(o) === todayKey
+                  const isPending = (o.status || 'Pending') !== 'Paid'
+                  return !isToday && isPending
+                })
+                const trackableOrders = [...todaysOrders, ...carryPendingOrders]
+
+                const todaysTotal = trackableOrders.reduce((sum, o) => {
                   if ((o.status || 'Pending') !== 'Paid') return sum
                   return sum + Number(o.totalAmount || 0)
                 }, 0)
 
-                if (todaysOrders.length === 0) {
+                if (trackableOrders.length === 0) {
                   return (
                     <div className="orders-empty">
                       <div className="empty-title">No orders today yet</div>
@@ -904,6 +914,7 @@ const UserDashboard = ({ user, onLogout }) => {
 
                 return (
                   <>
+                    <div className="weekly-breakdown-title" style={{ marginBottom: 8 }}>Today&apos;s Orders</div>
                     <div className="orders-table-wrap">
                       <table className="orders-table">
                         <thead>
@@ -926,6 +937,16 @@ const UserDashboard = ({ user, onLogout }) => {
                                 <div className="prod-cell">
                                   <div className="prod-name">{o.product}</div>
                                   <div className="prod-sub">Order #{String(idx + 1).padStart(3, '0')}</div>
+                                  <div className="prod-sub">
+                                    {(() => {
+                                      const orderDate = getOrderDateKey(o)
+                                      if (!orderDate) return 'Day: Unknown'
+                                      const today = toLocalDateKey(new Date())
+                                      const dayText = new Date(`${orderDate}T00:00:00`).toLocaleDateString('en-US', { weekday: 'long' })
+                                      if (orderDate === today) return `Day: ${dayText} (Today)`
+                                      return `Day: ${dayText} (${orderDate})`
+                                    })()}
+                                  </div>
                                   {o.emptyBottleSize && Number(o.emptyBottleQty || 0) > 0 ? (
                                     <div className="prod-sub">
                                       Empty bottle: {bottleSizes.find(b => b.id === o.emptyBottleSize)?.name} × {o.emptyBottleQty} ({formatKsh(Number(o.emptyBottleAmount || 0))})
@@ -978,15 +999,111 @@ const UserDashboard = ({ user, onLogout }) => {
                       </table>
                     </div>
 
+                    {carryPendingOrders.length > 0 ? (
+                      <>
+                        <div className="weekly-breakdown-title" style={{ marginTop: 12, marginBottom: 8 }}>
+                          Pending from Previous Days
+                        </div>
+                        <div className="orders-table-wrap">
+                          <table className="orders-table">
+                            <thead>
+                              <tr>
+                                <th>Time</th>
+                                <th>Product</th>
+                                <th className="num">Qty</th>
+                                <th className="num">Amount</th>
+                                <th>Status</th>
+                                <th>Payment</th>
+                                <th className="num">Total</th>
+                                <th>Actions</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {carryPendingOrders.map((o, idx) => (
+                                <tr key={`pending-${o.id}`} data-order={`Pending ${String(idx + 1).padStart(3, '0')}`}>
+                                  <td className="muted" data-label="Time">{o.time}</td>
+                                  <td data-label="Product">
+                                    <div className="prod-cell">
+                                      <div className="prod-name">{o.product}</div>
+                                      <div className="prod-sub">Pending #{String(idx + 1).padStart(3, '0')}</div>
+                                      <div className="prod-sub">
+                                        {(() => {
+                                          const orderDate = getOrderDateKey(o)
+                                          if (!orderDate) return 'Day: Unknown'
+                                          const dayText = new Date(`${orderDate}T00:00:00`).toLocaleDateString('en-US', { weekday: 'long' })
+                                          return `Day: ${dayText} (${orderDate})`
+                                        })()}
+                                      </div>
+                                      {o.emptyBottleSize && Number(o.emptyBottleQty || 0) > 0 ? (
+                                        <div className="prod-sub">
+                                          Empty bottle: {bottleSizes.find(b => b.id === o.emptyBottleSize)?.name} × {o.emptyBottleQty} ({formatKsh(Number(o.emptyBottleAmount || 0))})
+                                        </div>
+                                      ) : null}
+                                    </div>
+                                  </td>
+                                  <td className="num" data-label="Quantity">{o.quantity}</td>
+                                  <td className="num" data-label="Amount">{formatKsh(o.unitPrice)}</td>
+                                  <td data-label="Status">
+                                    <select
+                                      className={`status-select status-${String(o.status || 'Pending').toLowerCase()}`}
+                                      value={o.status || 'Pending'}
+                                      onChange={(e) => setOrderStatus(o.id, e.target.value)}
+                                    >
+                                      <option value="Pending">Pending</option>
+                                      <option value="Paid">Paid</option>
+                                    </select>
+                                  </td>
+                                  <td data-label="Payment">
+                                    <span className={`pay-badge ${o.paymentMethod}`}>
+                                      {o.paymentMethod === 'mpesa' ? (
+                                        <img src={mpesaIcon} alt="MPESA" />
+                                      ) : (
+                                        <img src={cashIcon} alt="Cash" />
+                                      )}
+                                      <span>{o.paymentMethod.toUpperCase()}</span>
+                                    </span>
+                                  </td>
+                                  <td className="num strong" data-label="Total">
+                                    {(o.status || 'Pending') === 'Paid' ? formatKsh(o.totalAmount) : '—'}
+                                  </td>
+                                  <td data-label="Actions">
+                                    <button
+                                      type="button"
+                                      className="snackbar-btn ghost"
+                                      style={{ padding: '8px 12px', borderRadius: 12 }}
+                                      onClick={(e) => {
+                                        e.preventDefault()
+                                        e.stopPropagation()
+                                        deleteOrder(o)
+                                      }}
+                                    >
+                                      Delete
+                                    </button>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </>
+                    ) : null}
+
                     <div className="orders-summary-bar">
                       <div className="summary-item">
                         <div className="summary-label">Orders</div>
-                        <div className="summary-value">{todaysOrders.length}</div>
+                        <div className="summary-value">{trackableOrders.length}</div>
                       </div>
                       <div className="summary-divider" />
                       <div className="summary-item">
                         <div className="summary-label">Total</div>
                         <div className="summary-value accent">{formatKsh(todaysTotal)}</div>
+                      </div>
+                      <div className="summary-divider" />
+                      <div className="summary-item">
+                        <div className="summary-label">Pending</div>
+                        <div className="summary-value">
+                          {trackableOrders.filter(o => (o.status || 'Pending') !== 'Paid').length}
+                        </div>
                       </div>
                     </div>
                   </>
@@ -1006,14 +1123,15 @@ const UserDashboard = ({ user, onLogout }) => {
                   .sort((a, b) => getOrderTimeValue(a) - getOrderTimeValue(b))
 
                 const orderCount = todaysOrders.length
-                const totalSales = todaysOrders.reduce((sum, o) => {
+                const paidTodaysOrders = todaysOrders.filter(o => (o.status || 'Pending') === 'Paid')
+                const totalSales = paidTodaysOrders.reduce((sum, o) => {
                   return sum + Number(o.totalAmount || 0)
                 }, 0)
-                const cashTotal = todaysOrders.reduce((sum, o) => {
+                const cashTotal = paidTodaysOrders.reduce((sum, o) => {
                   if (String(o.paymentMethod) !== 'cash') return sum
                   return sum + Number(o.totalAmount || 0)
                 }, 0)
-                const mpesaTotal = todaysOrders.reduce((sum, o) => {
+                const mpesaTotal = paidTodaysOrders.reduce((sum, o) => {
                   if (String(o.paymentMethod) !== 'mpesa') return sum
                   return sum + Number(o.totalAmount || 0)
                 }, 0)
@@ -1044,17 +1162,17 @@ const UserDashboard = ({ user, onLogout }) => {
                       <div className="daily-card">
                         <div className="daily-card-label">Today’s Sales Total</div>
                         <div className="daily-card-value accent">{formatKsh(totalSales)}</div>
-                        <div className="daily-card-hint">All recorded orders today</div>
+                        <div className="daily-card-hint">Paid orders for today</div>
                       </div>
                       <div className="daily-card">
                         <div className="daily-card-label">Cash Amount</div>
                         <div className="daily-card-value">{formatKsh(cashTotal)}</div>
-                        <div className="daily-card-hint">All cash orders today</div>
+                        <div className="daily-card-hint">Paid cash orders today</div>
                       </div>
                       <div className="daily-card">
                         <div className="daily-card-label">MPESA Amount</div>
                         <div className="daily-card-value">{formatKsh(mpesaTotal)}</div>
-                        <div className="daily-card-hint">All MPESA orders today</div>
+                        <div className="daily-card-hint">Paid MPESA orders today</div>
                       </div>
                       <div className="daily-card">
                         <div className="daily-card-label">Number of Orders</div>
@@ -1097,32 +1215,59 @@ const UserDashboard = ({ user, onLogout }) => {
             <div className="view-content weekly-summary-view">
               {(() => {
                 const now = new Date()
-                const weekStart = getStartOfWeek(now)
-                const weekEnd = addDays(weekStart, 6)
-                const startKey = toLocalDateKey(weekStart)
-                const endKey = toLocalDateKey(weekEnd)
+                now.setHours(0, 0, 0, 0)
+                const currentWeekStart = getStartOfWeek(now)
+                const lastWeekStart = addDays(currentWeekStart, -7)
 
-                const weekOrders = orders
+                const allUserOrdersWithDate = orders
                   .filter(o => isOrderForCurrentUser(o))
-                  .filter(o => {
-                    const k = getOrderDateKey(o)
-                    if (!k) return false
-                    return k >= startKey && k <= endKey
-                  })
+                  .map(o => ({ order: o, dateKey: getOrderDateKey(o) }))
+                  .filter(r => Boolean(r.dateKey))
+
+                const monthStart = new Date(now.getFullYear(), now.getMonth(), 1)
+                const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0)
+
+                const allDateKeys = allUserOrdersWithDate.map(r => r.dateKey).sort()
+                const firstOrderDateKey = allDateKeys[0] || toLocalDateKey(monthStart)
+                const lastOrderDateKey = allDateKeys[allDateKeys.length - 1] || toLocalDateKey(monthEnd)
+
+                let periodStart = monthStart
+                let periodEnd = monthEnd
+                let periodLabel = 'This Month'
+
+                if (summaryRange === 'this-week') {
+                  periodStart = currentWeekStart
+                  periodEnd = addDays(currentWeekStart, 6)
+                  periodLabel = 'This Week'
+                } else if (summaryRange === 'last-week') {
+                  periodStart = lastWeekStart
+                  periodEnd = addDays(lastWeekStart, 6)
+                  periodLabel = 'Last Week'
+                } else if (summaryRange === 'all-time') {
+                  periodStart = new Date(firstOrderDateKey)
+                  periodEnd = new Date(lastOrderDateKey)
+                  periodLabel = 'All Time'
+                }
+
+                const startKey = toLocalDateKey(periodStart)
+                const endKey = toLocalDateKey(periodEnd)
+
+                const weekOrders = allUserOrdersWithDate
+                  .filter(r => r.dateKey >= startKey && r.dateKey <= endKey)
+                  .map(r => r.order)
                   .slice()
                   .sort((a, b) => getOrderTimeValue(a) - getOrderTimeValue(b))
+                const paidWeekOrders = weekOrders.filter(o => (o.status || 'Pending') === 'Paid')
 
-                const weekTotal = weekOrders.reduce((sum, o) => sum + Number(o.totalAmount || 0), 0)
-                const weekCashTotal = weekOrders.reduce((sum, o) => {
+                const weekTotal = paidWeekOrders.reduce((sum, o) => sum + Number(o.totalAmount || 0), 0)
+                const weekCashTotal = paidWeekOrders.reduce((sum, o) => {
                   if (String(o.paymentMethod) !== 'cash') return sum
                   return sum + Number(o.totalAmount || 0)
                 }, 0)
-                const weekMpesaTotal = weekOrders.reduce((sum, o) => {
+                const weekMpesaTotal = paidWeekOrders.reduce((sum, o) => {
                   if (String(o.paymentMethod) !== 'mpesa') return sum
                   return sum + Number(o.totalAmount || 0)
                 }, 0)
-
-                const paidWeekOrders = weekOrders.filter(o => (o.status || 'Pending') === 'Paid')
                 const paidCount = paidWeekOrders.length
                 const pendingCount = weekOrders.length - paidCount
 
@@ -1138,11 +1283,10 @@ const UserDashboard = ({ user, onLogout }) => {
                 }
 
                 const dayTotals = []
-                for (let i = 0; i < 7; i++) {
-                  const d = addDays(weekStart, i)
+                for (let d = new Date(periodStart); d <= periodEnd; d = addDays(d, 1)) {
                   const k = toLocalDateKey(d)
                   const label = d.toLocaleDateString('en-US', { weekday: 'short' })
-                  const total = weekOrders.reduce((sum, o) => {
+                  const total = paidWeekOrders.reduce((sum, o) => {
                     if (getOrderDateKey(o) !== k) return sum
                     return sum + Number(o.totalAmount || 0)
                   }, 0)
@@ -1155,14 +1299,30 @@ const UserDashboard = ({ user, onLogout }) => {
                       <div>
                         <h2>Weekly Summary</h2>
                         <p className="weekly-subtitle">
-                          {weekStart.toLocaleDateString('en-US', { month: 'short', day: '2-digit' })}
+                          {periodStart.toLocaleDateString('en-US', { month: 'short', day: '2-digit' })}
                           {' — '}
-                          {weekEnd.toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' })}
+                          {periodEnd.toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' })}
                         </p>
                       </div>
                       <div className="weekly-pill">
                         <span className="pill-label">Week</span>
-                        <span className="pill-value">{startKey} → {endKey}</span>
+                        <span className="pill-value">{periodLabel}: {startKey} → {endKey}</span>
+                      </div>
+                    </div>
+                    <div className="orders-meta" style={{ marginBottom: '12px' }}>
+                      <div className="orders-pill" style={{ minWidth: '220px' }}>
+                        <span className="pill-label">Range</span>
+                        <select
+                          className="form-select"
+                          value={summaryRange}
+                          onChange={(e) => setSummaryRange(e.target.value)}
+                          aria-label="Choose summary range"
+                        >
+                          <option value="this-month">This Month (daily view)</option>
+                          <option value="this-week">This Week</option>
+                          <option value="last-week">Last Week</option>
+                          <option value="all-time">All Time</option>
+                        </select>
                       </div>
                     </div>
 

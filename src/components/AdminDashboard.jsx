@@ -60,6 +60,8 @@ const ADMIN_DARKMODE_KEY = 'creekFreshAdminDarkModeV1'
 const AdminDashboard = ({ admin, onLogout, onProfileUpdate }) => {
   const [activeView, setActiveView] = useState('dashboard')
   const [orders, setOrders] = useState([])
+  const [salesSummaryRange, setSalesSummaryRange] = useState('this-week')
+  const [salesMonthIndex, setSalesMonthIndex] = useState(() => new Date().getMonth())
   const [tanks, setTanks] = useState([])
   const [newTank, setNewTank] = useState({ name: '', liters: '' })
   const [bottles, setBottles] = useState({})
@@ -483,7 +485,7 @@ const AdminDashboard = ({ admin, onLogout, onProfileUpdate }) => {
               onClick={() => setActiveView('sales')}
             >
               <span className="nav-icon">💹</span>
-              <span className="nav-text">Sales</span>
+              <span className="nav-text">Sales Summary</span>
             </button>
             <button
               className={`nav-item ${activeView === 'inventory' ? 'active' : ''}`}
@@ -657,16 +659,22 @@ const AdminDashboard = ({ admin, onLogout, onProfileUpdate }) => {
                 {(() => {
                   const todayKey = toLocalDateKey(new Date())
                   const todaysOrders = orders
-                    .filter(o => (o.dateKey || toLocalDateKey(o.timestamp)) === todayKey)
+                    .filter(o => getOrderDateKey(o) === todayKey)
                     .slice()
                     .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp))
+                  const carryPendingOrders = orders
+                    .filter(o => getOrderDateKey(o) !== todayKey)
+                    .filter(o => (o.status || 'Pending') !== 'Paid')
+                    .slice()
+                    .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp))
+                  const trackableOrders = [...todaysOrders, ...carryPendingOrders]
 
-                  const todaysTotal = todaysOrders.reduce((sum, o) => {
+                  const todaysTotal = trackableOrders.reduce((sum, o) => {
                     if ((o.status || 'Pending') !== 'Paid') return sum
                     return sum + Number(o.totalAmount || 0)
                   }, 0)
 
-                  if (todaysOrders.length === 0) {
+                  if (trackableOrders.length === 0) {
                     return (
                       <div className="orders-empty">
                         <div className="empty-title">No orders today yet</div>
@@ -677,6 +685,7 @@ const AdminDashboard = ({ admin, onLogout, onProfileUpdate }) => {
 
                   return (
                     <>
+                      <div className="weekly-breakdown-title" style={{ marginBottom: 8 }}>Today&apos;s Orders</div>
                       <div className="orders-table-wrap">
                         <table className="orders-table">
                           <thead>
@@ -725,10 +734,73 @@ const AdminDashboard = ({ admin, onLogout, onProfileUpdate }) => {
                         </table>
                       </div>
 
+                      {carryPendingOrders.length > 0 ? (
+                        <>
+                          <div className="weekly-breakdown-title" style={{ marginTop: 12, marginBottom: 8 }}>
+                            Pending from Previous Days
+                          </div>
+                          <div className="orders-table-wrap">
+                            <table className="orders-table">
+                              <thead>
+                                <tr>
+                                  <th>Time</th>
+                                  <th>Product</th>
+                                  <th>User</th>
+                                  <th className="num">Qty</th>
+                                  <th className="num">Amount</th>
+                                  <th>Status</th>
+                                  <th>Payment</th>
+                                  <th className="num">Total</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {carryPendingOrders.map((o, idx) => (
+                                  <tr key={`pending-${o.id}`} data-order={`Pending ${String(idx + 1).padStart(3, '0')}`}>
+                                    <td className="muted" data-label="Time">{o.time}</td>
+                                    <td data-label="Product">
+                                      <div className="prod-cell">
+                                        <div className="prod-name">{o.product}</div>
+                                        <div className="prod-sub">Pending #{String(idx + 1).padStart(3, '0')}</div>
+                                        <div className="prod-sub">
+                                          {(() => {
+                                            const orderDate = getOrderDateKey(o)
+                                            if (!orderDate) return 'Day: Unknown'
+                                            const dayText = new Date(`${orderDate}T00:00:00`).toLocaleDateString('en-US', { weekday: 'long' })
+                                            return `Day: ${dayText} (${orderDate})`
+                                          })()}
+                                        </div>
+                                      </div>
+                                    </td>
+                                    <td data-label="User">
+                                      {o.username || o.customerName || o.customer || '—'}
+                                    </td>
+                                    <td className="num" data-label="Quantity">{o.quantity}</td>
+                                    <td className="num" data-label="Amount">{formatKsh(o.unitPrice)}</td>
+                                    <td data-label="Status">
+                                      <span className={`status-select status-${String(o.status || 'Pending').toLowerCase()}`} style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', cursor: 'default' }}>
+                                        {o.status || 'Pending'}
+                                      </span>
+                                    </td>
+                                    <td data-label="Payment">
+                                      <span className={`pay-badge ${o.paymentMethod}`}>
+                                        <span className="pay-label">{o.paymentMethod?.toUpperCase()}</span>
+                                      </span>
+                                    </td>
+                                    <td className="num strong" data-label="Total">
+                                      {(o.status || 'Pending') === 'Paid' ? formatKsh(o.totalAmount) : '—'}
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </>
+                      ) : null}
+
                       <div className="orders-summary-bar">
                         <div className="summary-item">
                           <div className="summary-label">Orders</div>
-                          <div className="summary-value">{todaysOrders.length}</div>
+                          <div className="summary-value">{trackableOrders.length}</div>
                         </div>
                         <div className="summary-divider" />
                         <div className="summary-item">
@@ -745,28 +817,58 @@ const AdminDashboard = ({ admin, onLogout, onProfileUpdate }) => {
               <div className="view-content weekly-summary-view sales-root">
                 {(() => {
                   const now = new Date()
+                  now.setHours(0, 0, 0, 0)
+                  const selectedMonthDate = new Date(now.getFullYear(), salesMonthIndex, 1)
                   // Daily
                   const todayStart = new Date(now); todayStart.setHours(0,0,0,0)
                   const todayEnd = new Date(now); todayEnd.setHours(23,59,59,999)
                   const daily = sumPaidByMethod(todayStart, todayEnd)
 
-                  // Weekly
-                  const weekStart = getStartOfWeek(now)
-                  const weekEnd = addDays(weekStart, 6)
-                  const weekly = sumPaidByMethod(weekStart, weekEnd)
-                  const weekDays = []
-                  for (let i = 0; i < 7; i++) {
-                    const d = addDays(weekStart, i)
+                  // Period summary (same behavior as user dashboard)
+                  const currentWeekStart = getStartOfWeek(now)
+                  const lastWeekStart = addDays(currentWeekStart, -7)
+                  const { start: monthStart, end: monthEnd } = getMonthRange(now)
+                  const allDateKeys = orders
+                    .map(o => getOrderDateKey(o))
+                    .filter(Boolean)
+                    .sort()
+                  const firstOrderDateKey = allDateKeys[0] || toLocalDateKey(monthStart)
+                  const lastOrderDateKey = allDateKeys[allDateKeys.length - 1] || toLocalDateKey(monthEnd)
+
+                  let periodStart = monthStart
+                  let periodEnd = monthEnd
+                  let periodLabel = 'This Month'
+                  if (salesSummaryRange === 'this-week') {
+                    periodStart = currentWeekStart
+                    periodEnd = addDays(currentWeekStart, 6)
+                    periodLabel = 'This Week'
+                  } else if (salesSummaryRange === 'last-week') {
+                    periodStart = lastWeekStart
+                    periodEnd = addDays(lastWeekStart, 6)
+                    periodLabel = 'Last Week'
+                  } else if (salesSummaryRange === 'this-month') {
+                    periodStart = monthStart
+                    periodEnd = monthEnd
+                    periodLabel = 'This Month'
+                  } else if (salesSummaryRange === 'all-time') {
+                    periodStart = new Date(firstOrderDateKey)
+                    periodEnd = new Date(lastOrderDateKey)
+                    periodLabel = 'All Time'
+                  }
+
+                  const periodSummary = sumPaidByMethod(periodStart, periodEnd)
+                  const periodDays = []
+                  for (let d = new Date(periodStart); d <= periodEnd; d = addDays(d, 1)) {
                     const k = toLocalDateKey(d)
                     const label = d.toLocaleDateString('en-US', { weekday: 'short' })
                     const sums = sumPaidForDateKey(k)
-                    weekDays.push({ label, ...sums })
+                    periodDays.push({ k, label, ...sums })
                   }
 
                   // Monthly
-                  const { start: monthStart, end: monthEnd } = getMonthRange(now)
-                  const monthly = sumPaidByMethod(monthStart, monthEnd)
-                  const monthWeeks = getMonthWeeksRangesSimple(now).map(w => ({
+                  const { start: selectedMonthStart, end: selectedMonthEnd } = getMonthRange(selectedMonthDate)
+                  const monthly = sumPaidByMethod(selectedMonthStart, selectedMonthEnd)
+                  const monthWeeks = getMonthWeeksRangesSimple(selectedMonthDate).map(w => ({
                     label: w.label,
                     ...sumPaidByMethod(w.start, w.end)
                   }))
@@ -775,8 +877,8 @@ const AdminDashboard = ({ admin, onLogout, onProfileUpdate }) => {
                     <>
                       <div className="weekly-header">
                         <div>
-                          <h2>Sales</h2>
-                          <p className="weekly-subtitle">Daily, Weekly and Monthly breakdowns (all recorded orders)</p>
+                          <h2>Sales Summary</h2>
+                          <p className="weekly-subtitle">Daily, weekly and monthly breakdowns (all recorded orders)</p>
                         </div>
                       </div>
 
@@ -799,12 +901,60 @@ const AdminDashboard = ({ admin, onLogout, onProfileUpdate }) => {
                         </div>
                       </div>
 
-                      {/* Weekly: Mon–Sun breakdown + total */}
+                      <div className="orders-meta" style={{ marginTop: 12 }}>
+                        <div className="orders-pill" style={{ minWidth: '220px' }}>
+                          <span className="pill-label">Monthly Filter</span>
+                          <select
+                            className="form-select"
+                            value={String(salesMonthIndex)}
+                            onChange={(e) => setSalesMonthIndex(Number(e.target.value))}
+                            aria-label="Choose month"
+                          >
+                            {[
+                              'January', 'February', 'March', 'April', 'May', 'June',
+                              'July', 'August', 'September', 'October', 'November', 'December'
+                            ].map((name, idx) => (
+                              <option key={name} value={String(idx)}>{name}</option>
+                            ))}
+                          </select>
+                        </div>
+                        <div className="orders-pill">
+                          <span className="pill-label">Selected Month</span>
+                          <span className="pill-value">
+                            {selectedMonthDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="orders-meta" style={{ marginTop: 12 }}>
+                        <div className="orders-pill" style={{ minWidth: '240px' }}>
+                          <span className="pill-label">Range</span>
+                          <select
+                            className="form-select"
+                            value={salesSummaryRange}
+                            onChange={(e) => setSalesSummaryRange(e.target.value)}
+                            aria-label="Choose sales summary range"
+                          >
+                            <option value="this-month">This Month (daily view)</option>
+                            <option value="this-week">This Week</option>
+                            <option value="last-week">Last Week</option>
+                            <option value="all-time">All Time</option>
+                          </select>
+                        </div>
+                        <div className="orders-pill">
+                          <span className="pill-label">Period</span>
+                          <span className="pill-value">
+                            {periodLabel}: {toLocalDateKey(periodStart)} → {toLocalDateKey(periodEnd)}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Period: day-by-day + total (matches user summary style) */}
                       <div className="weekly-breakdown sales-weekly" style={{ marginTop: 12 }}>
-                        <div className="weekly-breakdown-title">Weekly (Mon–Sun)</div>
+                        <div className="weekly-breakdown-title">Sales Totals by Day</div>
                         <div className="weekly-breakdown-grid">
-                          {weekDays.map(d => (
-                            <div key={d.label} className="week-day">
+                          {periodDays.map(d => (
+                            <div key={d.k} className="week-day">
                               <div className="week-day-label">{d.label}</div>
                               <div className="week-day-value">{formatKsh(d.total)}</div>
                               <div className="week-day-hint">
@@ -817,19 +967,21 @@ const AdminDashboard = ({ admin, onLogout, onProfileUpdate }) => {
                       </div>
                       <div className="orders-summary-bar sales-weekly-total" style={{ marginTop: 12 }}>
                         <div className="summary-item">
-                          <div className="summary-label">Weekly Total</div>
-                          <div className="summary-value accent">{formatKsh(weekly.total)}</div>
+                          <div className="summary-label">Period Total</div>
+                          <div className="summary-value accent">{formatKsh(periodSummary.total)}</div>
                         </div>
                         <div className="summary-divider" />
                         <div className="summary-item">
                           <div className="summary-label">Cash / MPESA</div>
-                          <div className="summary-value">{formatKsh(weekly.cash)} • {formatKsh(weekly.mpesa)}</div>
+                          <div className="summary-value">{formatKsh(periodSummary.cash)} • {formatKsh(periodSummary.mpesa)}</div>
                         </div>
                       </div>
 
                       {/* Monthly: Week 1–4 breakdown + total */}
                       <div className="weekly-breakdown sales-monthly" style={{ marginTop: 16 }}>
-                        <div className="weekly-breakdown-title">Monthly (Week 1–4)</div>
+                        <div className="weekly-breakdown-title">
+                          Monthly ({selectedMonthDate.toLocaleDateString('en-US', { month: 'long' })} - Week 1-4)
+                        </div>
                         <div className="weekly-breakdown-grid">
                           {monthWeeks.map(w => (
                             <div key={w.label} className="week-day">
