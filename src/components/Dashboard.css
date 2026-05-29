@@ -1882,9 +1882,9 @@
 }
 
 .tank-breakdown-row {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  justify-content: space-between;
   gap: 10px;
   padding: 7px 10px;
   border-radius: 10px;
@@ -1895,10 +1895,12 @@
 .tank-breakdown-name {
   display: inline-flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 8px;
   font-size: 0.88rem;
   font-weight: 700;
   color: #37474F;
+  min-width: 0;
 }
 
 .tank-active-badge {
@@ -1919,6 +1921,7 @@
   font-weight: 900;
   color: #0D47A1;
   white-space: nowrap;
+  text-align: right;
 }
 
 .dash-inv-card::after {
@@ -2004,6 +2007,16 @@
   }
   .weekly-breakdown-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .tank-breakdown-row {
+    grid-template-columns: 1fr;
+    align-items: flex-start;
+    gap: 6px;
+  }
+
+  .tank-breakdown-value {
+    text-align: left;
   }
 }
 
