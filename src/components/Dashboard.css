@@ -1099,6 +1099,51 @@
   color: #1976D2;
 }
 
+.pay-method-select {
+  width: 100%;
+  min-width: 130px;
+  padding: 10px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(33, 150, 243, 0.2);
+  background: rgba(255, 255, 255, 0.9);
+  color: #1565C0;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.pay-method-select-wrap {
+  position: relative;
+  width: 100%;
+  min-width: 130px;
+}
+
+.pay-method-select.with-icon {
+  padding-left: 38px;
+}
+
+.pay-method-select-icon {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 16px;
+  height: 16px;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.pay-method-select-icon img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.pay-method-select:focus {
+  outline: none;
+  border-color: rgba(33, 150, 243, 0.35);
+  box-shadow: 0 0 0 3px rgba(33, 150, 243, 0.12);
+}
+
 .status-select {
   width: 100%;
   min-width: 130px;
@@ -1198,6 +1243,17 @@
 .dashboard-container[data-theme="dark"] .pay-badge {
   background: rgba(2, 6, 23, 0.40);
   border-color: rgba(148, 163, 184, 0.18);
+}
+
+.dashboard-container[data-theme="dark"] .pay-method-select {
+  background: rgba(2, 6, 23, 0.45);
+  border-color: rgba(148, 163, 184, 0.24);
+  color: rgba(187, 247, 208, 0.96);
+}
+
+.dashboard-container[data-theme="dark"] .pay-method-select:focus {
+  border-color: rgba(125, 211, 252, 0.55);
+  box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.15);
 }
 
 /* Daily Summary */
@@ -1777,6 +1833,37 @@
   padding: 14px 16px;
 }
 
+.tank-breakdown-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.tank-breakdown-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 7px 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(33, 150, 243, 0.14);
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.tank-breakdown-name {
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: #37474F;
+}
+
+.tank-breakdown-value {
+  font-size: 0.88rem;
+  font-weight: 900;
+  color: #0D47A1;
+  white-space: nowrap;
+}
+
 .dash-inv-card::after {
   content: '';
   position: absolute;
@@ -1820,6 +1907,16 @@
 }
 .dashboard-container[data-theme="dark"] .dash-inv-card {
   background: linear-gradient(135deg, rgba(2, 6, 23, 0.40) 0%, rgba(15, 23, 42, 0.50) 100%);
+}
+.dashboard-container[data-theme="dark"] .tank-breakdown-row {
+  background: rgba(2, 6, 23, 0.5);
+  border-color: rgba(148, 163, 184, 0.24);
+}
+.dashboard-container[data-theme="dark"] .tank-breakdown-name {
+  color: rgba(226, 232, 240, 0.92);
+}
+.dashboard-container[data-theme="dark"] .tank-breakdown-value {
+  color: rgba(125, 211, 252, 0.98);
 }
 .dashboard-container[data-theme="dark"] .dash-summary {
   background: linear-gradient(135deg, rgba(76, 29, 149, 0.35) 0%, rgba(12, 74, 110, 0.35) 100%);

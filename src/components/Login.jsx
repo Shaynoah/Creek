@@ -5,6 +5,7 @@ import { CLOUD_KEYS, loadCloudState } from '@src/lib/cloudStore'
 
 const Login = ({ onLogin }) => {
   const ADMIN_AUTH_KEY = 'creekFreshAdminAuthV1'
+  const USERS_KEY = 'creekFreshUsersV1'
   const brandText = 'CREEK FRESH'
   const [loginType, setLoginType] = useState('user') // 'user' or 'admin'
   const [name, setName] = useState('')
@@ -12,6 +13,22 @@ const Login = ({ onLogin }) => {
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [adminAuth, setAdminAuth] = useState(null)
+  const [managedUsers, setManagedUsers] = useState([])
+
+  const normalizeUsers = (input) => {
+    if (!Array.isArray(input)) return []
+    const out = []
+    const seen = new Set()
+    for (const raw of input) {
+      const val = String(raw || '').trim()
+      if (!val) continue
+      const key = val.toLowerCase()
+      if (seen.has(key)) continue
+      seen.add(key)
+      out.push(val)
+    }
+    return out
+  }
 
   useEffect(() => {
     let alive = true
@@ -39,16 +56,55 @@ const Login = ({ onLogin }) => {
     return () => { alive = false }
   }, [])
 
+  useEffect(() => {
+    let alive = true
+    const loadUsers = async () => {
+      try {
+        const cloudUsers = await loadCloudState(CLOUD_KEYS.users)
+        const normalizedCloud = normalizeUsers(cloudUsers)
+        if (alive && normalizedCloud.length > 0) {
+          setManagedUsers(normalizedCloud)
+          localStorage.setItem(USERS_KEY, JSON.stringify(normalizedCloud))
+          return
+        }
+      } catch {
+        // ignore
+      }
+      try {
+        const raw = localStorage.getItem(USERS_KEY)
+        const parsed = raw ? JSON.parse(raw) : ['jere']
+        const normalizedLocal = normalizeUsers(parsed)
+        const fallback = normalizedLocal.length > 0 ? normalizedLocal : ['jere']
+        if (!alive) return
+        setManagedUsers(fallback)
+        localStorage.setItem(USERS_KEY, JSON.stringify(fallback))
+      } catch {
+        if (!alive) return
+        setManagedUsers(['jere'])
+      }
+    }
+    loadUsers().catch(() => {})
+    return () => { alive = false }
+  }, [])
+
   const handleSubmit = (e) => {
     e.preventDefault()
     setError('')
 
     if (loginType === 'user') {
-      if (!name.trim()) {
+      const typedName = String(name || '').trim()
+      if (!typedName) {
         setError('Please enter your name')
         return
       }
-      onLogin({ name: name.trim() }, 'user')
+      const matchedUser = managedUsers.find(
+        (u) => u.toLowerCase() === typedName.toLowerCase()
+      )
+      if (!matchedUser) {
+        setError('User not found. Use a user set by admin.')
+        return
+      }
+      onLogin({ name: matchedUser }, 'user')
     } else {
       if (!username.trim() || !password.trim()) {
         setError('Please enter both username and password')

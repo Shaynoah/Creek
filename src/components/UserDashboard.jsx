@@ -23,8 +23,10 @@ const UserDashboard = ({ user, onLogout }) => {
   })
   const [formData, setFormData] = useState({
     product: '',
-    quantity: '',
+    quantity: '1',
+    customerName: '',
     paymentMethod: '',
+    paymentStatus: 'Paid',
     emptyBottleSize: '',
     emptyBottleQty: ''
   })
@@ -136,8 +138,7 @@ const UserDashboard = ({ user, onLogout }) => {
 
   const currentUsername = String(user?.name || '').trim().toLowerCase()
   const isOrderForCurrentUser = (order) => {
-    if (!currentUsername) return true
-    return getOrderUsername(order) === currentUsername
+    return true
   }
 
   const getStartOfWeek = (date) => {
@@ -180,10 +181,21 @@ const UserDashboard = ({ user, onLogout }) => {
 
   const handleInputChange = (e) => {
     const { name, value } = e.target
-    setFormData(prev => ({
-      ...prev,
-      [name]: name === 'quantity' ? value.replace(/[^\d]/g, '') : value
-    }))
+    setFormData(prev => {
+      const normalizedValue = name === 'quantity' ? value.replace(/[^\d]/g, '') : value
+      // Customer name is only needed for pending orders.
+      if (name === 'paymentStatus' && normalizedValue === 'Paid') {
+        return {
+          ...prev,
+          [name]: normalizedValue,
+          customerName: '',
+        }
+      }
+      return {
+        ...prev,
+        [name]: normalizedValue,
+      }
+    })
   }
 
   const effectiveProducts = (productPrices
@@ -424,7 +436,14 @@ const UserDashboard = ({ user, onLogout }) => {
       showSnackbar('Please enter a valid quantity (at least 1).', 'warning')
       return
     }
-    
+
+    const selectedStatus = formData.paymentStatus === 'Pending' ? 'Pending' : 'Paid'
+    const customerName = String(formData.customerName || '').trim()
+    if (selectedStatus === 'Pending' && !customerName) {
+      showSnackbar('Please enter customer name for this pending order.', 'warning')
+      return
+    }
+
     // Get current date and time
     const now = new Date()
     const date = now.toLocaleDateString('en-US', { 
@@ -449,16 +468,16 @@ const UserDashboard = ({ user, onLogout }) => {
       unitPrice: selectedProduct.price,
       totalAmount: totalAmount,
       paymentMethod: formData.paymentMethod,
-      status: 'Pending',
+      status: selectedStatus,
       date: date,
       time: time,
       dateTime: dateTime,
       timestamp: now.toISOString(),
       dateKey: now.toLocaleDateString('en-CA'),
-      // Username/name of the customer who made the order (used by admin views).
+      // Username of the staff user recording this order.
       username: user.name,
-      // Backward compatibility for already saved orders in localStorage/Supabase.
-      customerName: user.name,
+      // End customer name for tracing pending orders.
+      customerName: selectedStatus === 'Pending' ? customerName : '',
       emptyBottleSize: formData.emptyBottleSize || '',
       emptyBottleQty: emptyBottleQtyInt,
       emptyBottleAmount: emptyBottleAmount
@@ -467,7 +486,7 @@ const UserDashboard = ({ user, onLogout }) => {
     // Ask for confirmation via snackbar before recording
     setPendingOrder(saleRecord)
     showSnackbar(
-      `Proceed to record: ${saleRecord.product} × ${saleRecord.quantity} • ${formatKsh(saleRecord.totalAmount)} • ${saleRecord.paymentMethod.toUpperCase()}`,
+      `Proceed to record: ${saleRecord.product} × ${saleRecord.quantity} • ${formatKsh(saleRecord.totalAmount)} • ${saleRecord.paymentMethod.toUpperCase()} • ${saleRecord.status.toUpperCase()}`,
       'info',
       0,
     )
@@ -528,8 +547,10 @@ const UserDashboard = ({ user, onLogout }) => {
     // Reset form after recording
     setFormData({
       product: '',
-      quantity: '',
-      paymentMethod: ''
+      quantity: '1',
+      customerName: '',
+      paymentMethod: '',
+      paymentStatus: 'Paid'
     })
 
     showSnackbar('Order recorded in My Orders.', 'success', 2400)
@@ -556,6 +577,62 @@ const UserDashboard = ({ user, onLogout }) => {
       }
       return updated
     })
+  }
+
+  const setOrderPaymentMethod = (orderId, paymentMethod) => {
+    const nextPaymentMethod = paymentMethod === 'mpesa' ? 'mpesa' : 'cash'
+    setOrders(prev => {
+      const updated = prev.map((o) => {
+        if (o.id !== orderId) return o
+        if ((o.status || 'Pending') === 'Paid') return o
+        return { ...o, paymentMethod: nextPaymentMethod }
+      })
+      try {
+        const payload = JSON.stringify(updated)
+        localStorage.setItem(ORDERS_KEY, payload)
+        localStorage.setItem(ORDERS_BACKUP_KEY, payload)
+        sessionStorage.setItem(ORDERS_SESSION_KEY, payload)
+        saveCloudState(CLOUD_KEYS.orders, updated).catch(() => {})
+      } catch {
+        // ignore
+      }
+      return updated
+    })
+  }
+
+  const getPaymentDisplayLabel = (paymentMethod) => {
+    return paymentMethod === 'mpesa' ? 'MPESA' : 'CASH'
+  }
+
+  const getOrderCustomerName = (order) => {
+    const candidate = String(order?.customerName || '').trim()
+    if (!candidate) return ''
+    const orderUser = String(order?.username || '').trim().toLowerCase()
+    if (orderUser && candidate.toLowerCase() === orderUser) return ''
+    return candidate
+  }
+
+  const renderPendingPaymentSelector = (order) => {
+    const paymentMethod = order.paymentMethod === 'mpesa' ? 'mpesa' : 'cash'
+    return (
+      <div className={`pay-method-select-wrap ${paymentMethod}`}>
+        <span className="pay-method-select-icon" aria-hidden="true">
+          <img
+            src={paymentMethod === 'mpesa' ? mpesaIcon : cashIcon}
+            alt=""
+          />
+        </span>
+        <select
+          className="pay-method-select with-icon"
+          value={paymentMethod}
+          onChange={(e) => setOrderPaymentMethod(order.id, e.target.value)}
+          aria-label="Choose payment method"
+        >
+          <option value="cash">CASH</option>
+          <option value="mpesa">MPESA</option>
+        </select>
+      </div>
+    )
   }
 
   const deleteOrder = (order) => {
@@ -673,6 +750,13 @@ const UserDashboard = ({ user, onLogout }) => {
             >
               <span className="nav-icon">📋</span>
               <span className="nav-text">My Orders</span>
+            </button>
+            <button
+              className={`nav-item ${activeView === 'pending-orders' ? 'active' : ''}`}
+              onClick={() => setActiveView('pending-orders')}
+            >
+              <span className="nav-icon">⏳</span>
+              <span className="nav-text">Pending Orders</span>
             </button>
             <button
               className={`nav-item ${activeView === 'daily-summary' ? 'active' : ''}`}
@@ -794,6 +878,58 @@ const UserDashboard = ({ user, onLogout }) => {
                 </div>
 
                 <div className="form-group">
+                  <label>
+                    Order Status <span className="required">*</span>
+                  </label>
+                  <div className="payment-options">
+                    <label className="payment-option cash">
+                      <input
+                        type="radio"
+                        name="paymentStatus"
+                        value="Paid"
+                        checked={formData.paymentStatus === 'Paid'}
+                        onChange={handleInputChange}
+                        required
+                      />
+                      <span className="payment-label">
+                        <span>Paid</span>
+                      </span>
+                    </label>
+                    <label className="payment-option mpesa">
+                      <input
+                        type="radio"
+                        name="paymentStatus"
+                        value="Pending"
+                        checked={formData.paymentStatus === 'Pending'}
+                        onChange={handleInputChange}
+                        required
+                      />
+                      <span className="payment-label">
+                        <span>Pending</span>
+                      </span>
+                    </label>
+                  </div>
+                </div>
+
+                {formData.paymentStatus === 'Pending' ? (
+                  <div className="form-group">
+                    <label htmlFor="customerName">
+                      Customer Name <span className="required">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      id="customerName"
+                      name="customerName"
+                      value={formData.customerName}
+                      onChange={handleInputChange}
+                      className="form-input"
+                      placeholder="Enter customer name"
+                      required
+                    />
+                  </div>
+                ) : null}
+
+                <div className="form-group">
                   <label>Empty Bottle (optional)</label>
                   <div className="form-row empty-bottle-row">
                     <select
@@ -855,7 +991,13 @@ const UserDashboard = ({ user, onLogout }) => {
                 <button 
                   type="submit" 
                   className="submit-btn"
-                  disabled={!formData.product || !formData.quantity || !formData.paymentMethod}
+                  disabled={
+                    !formData.product ||
+                    !formData.quantity ||
+                    !formData.paymentMethod ||
+                    !formData.paymentStatus ||
+                    (formData.paymentStatus === 'Pending' && !formData.customerName.trim())
+                  }
                 >
                   <span>Make Order</span>
                   <span className="btn-arrow">→</span>
@@ -883,20 +1025,15 @@ const UserDashboard = ({ user, onLogout }) => {
               </div>
 
               {(() => {
-                const todayKey = toLocalDateKey(new Date())
                 const myOrders = orders
                   .filter(o => isOrderForCurrentUser(o))
+                  .filter(o => (o.status || 'Pending') === 'Paid')
                   .slice()
                   .sort((a, b) => getOrderTimeValue(a) - getOrderTimeValue(b))
 
-                // Keep unpaid orders visible across days until marked as Paid.
-                const todaysOrders = myOrders.filter(o => getOrderDateKey(o) === todayKey)
-                const carryPendingOrders = myOrders.filter(o => {
-                  const isToday = getOrderDateKey(o) === todayKey
-                  const isPending = (o.status || 'Pending') !== 'Paid'
-                  return !isToday && isPending
-                })
-                const trackableOrders = [...todaysOrders, ...carryPendingOrders]
+                const paidOrders = myOrders
+                const carryPendingOrders = []
+                const trackableOrders = [...paidOrders]
 
                 const todaysTotal = trackableOrders.reduce((sum, o) => {
                   if ((o.status || 'Pending') !== 'Paid') return sum
@@ -906,21 +1043,22 @@ const UserDashboard = ({ user, onLogout }) => {
                 if (trackableOrders.length === 0) {
                   return (
                     <div className="orders-empty">
-                      <div className="empty-title">No orders today yet</div>
-                      <div className="empty-subtitle">Go to “New Refill Sale” to make your first order.</div>
+                      <div className="empty-title">No paid orders yet</div>
+                      <div className="empty-subtitle">Create a paid order in “New Refill Sale” to see it here.</div>
                     </div>
                   )
                 }
 
                 return (
                   <>
-                    <div className="weekly-breakdown-title" style={{ marginBottom: 8 }}>Today&apos;s Orders</div>
+                    <div className="weekly-breakdown-title" style={{ marginBottom: 8 }}>Paid Orders</div>
                     <div className="orders-table-wrap">
                       <table className="orders-table">
                         <thead>
                           <tr>
                             <th>Time</th>
                             <th>Product</th>
+                            <th>Customer</th>
                             <th className="num">Qty</th>
                             <th className="num">Amount</th>
                             <th>Status</th>
@@ -930,13 +1068,14 @@ const UserDashboard = ({ user, onLogout }) => {
                           </tr>
                         </thead>
                         <tbody>
-                          {todaysOrders.map((o, idx) => (
+                          {paidOrders.map((o, idx) => (
                             <tr key={o.id} data-order={`Order ${String(idx + 1).padStart(3, '0')}`}>
                               <td className="muted" data-label="Time">{o.time}</td>
                               <td data-label="Product">
                                 <div className="prod-cell">
                                   <div className="prod-name">{o.product}</div>
                                   <div className="prod-sub">Order #{String(idx + 1).padStart(3, '0')}</div>
+                                  <div className="prod-sub">Customer: {getOrderCustomerName(o) || '—'}</div>
                                   <div className="prod-sub">
                                     {(() => {
                                       const orderDate = getOrderDateKey(o)
@@ -954,6 +1093,7 @@ const UserDashboard = ({ user, onLogout }) => {
                                   ) : null}
                                 </div>
                               </td>
+                              <td data-label="Customer">{getOrderCustomerName(o) || '—'}</td>
                               <td className="num" data-label="Quantity">{o.quantity}</td>
                               <td className="num" data-label="Amount">{formatKsh(o.unitPrice)}</td>
                               <td data-label="Status">
@@ -967,14 +1107,18 @@ const UserDashboard = ({ user, onLogout }) => {
                                 </select>
                               </td>
                               <td data-label="Payment">
-                                <span className={`pay-badge ${o.paymentMethod}`}>
-                                  {o.paymentMethod === 'mpesa' ? (
-                                    <img src={mpesaIcon} alt="MPESA" />
-                                  ) : (
-                                    <img src={cashIcon} alt="Cash" />
-                                  )}
-                                  <span>{o.paymentMethod.toUpperCase()}</span>
-                                </span>
+                                {(o.status || 'Pending') === 'Pending' ? (
+                                  renderPendingPaymentSelector(o)
+                                ) : (
+                                  <span className={`pay-badge ${o.paymentMethod}`}>
+                                    {o.paymentMethod === 'mpesa' ? (
+                                      <img src={mpesaIcon} alt="MPESA" />
+                                    ) : (
+                                      <img src={cashIcon} alt="Cash" />
+                                    )}
+                                    <span>{getPaymentDisplayLabel(o.paymentMethod)}</span>
+                                  </span>
+                                )}
                               </td>
                               <td className="num strong" data-label="Total">
                                 {(o.status || 'Pending') === 'Paid' ? formatKsh(o.totalAmount) : '—'}
@@ -1026,6 +1170,7 @@ const UserDashboard = ({ user, onLogout }) => {
                                     <div className="prod-cell">
                                       <div className="prod-name">{o.product}</div>
                                       <div className="prod-sub">Pending #{String(idx + 1).padStart(3, '0')}</div>
+                                      <div className="prod-sub">Customer: {getOrderCustomerName(o) || '—'}</div>
                                       <div className="prod-sub">
                                         {(() => {
                                           const orderDate = getOrderDateKey(o)
@@ -1054,14 +1199,18 @@ const UserDashboard = ({ user, onLogout }) => {
                                     </select>
                                   </td>
                                   <td data-label="Payment">
-                                    <span className={`pay-badge ${o.paymentMethod}`}>
-                                      {o.paymentMethod === 'mpesa' ? (
-                                        <img src={mpesaIcon} alt="MPESA" />
-                                      ) : (
-                                        <img src={cashIcon} alt="Cash" />
-                                      )}
-                                      <span>{o.paymentMethod.toUpperCase()}</span>
-                                    </span>
+                                    {(o.status || 'Pending') === 'Pending' ? (
+                                      renderPendingPaymentSelector(o)
+                                    ) : (
+                                      <span className={`pay-badge ${o.paymentMethod}`}>
+                                        {o.paymentMethod === 'mpesa' ? (
+                                          <img src={mpesaIcon} alt="MPESA" />
+                                        ) : (
+                                          <img src={cashIcon} alt="Cash" />
+                                        )}
+                                        <span>{getPaymentDisplayLabel(o.paymentMethod)}</span>
+                                      </span>
+                                    )}
                                   </td>
                                   <td className="num strong" data-label="Total">
                                     {(o.status || 'Pending') === 'Paid' ? formatKsh(o.totalAmount) : '—'}
@@ -1100,10 +1249,133 @@ const UserDashboard = ({ user, onLogout }) => {
                       </div>
                       <div className="summary-divider" />
                       <div className="summary-item">
-                        <div className="summary-label">Pending</div>
+                        <div className="summary-label">Paid</div>
                         <div className="summary-value">
-                          {trackableOrders.filter(o => (o.status || 'Pending') !== 'Paid').length}
+                          {trackableOrders.filter(o => (o.status || 'Pending') === 'Paid').length}
                         </div>
+                      </div>
+                    </div>
+                  </>
+                )
+              })()}
+            </div>
+          )}
+
+          {activeView === 'pending-orders' && (
+            <div className="view-content my-orders-view">
+              <div className="orders-header">
+                <div>
+                  <h2>Pending Orders</h2>
+                </div>
+                <div className="orders-meta">
+                  <div className="orders-pill">
+                    <span className="pill-label">Date</span>
+                    <span className="pill-value">{new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: '2-digit' })}</span>
+                  </div>
+                </div>
+              </div>
+
+              {(() => {
+                const pendingOrders = orders
+                  .filter(o => isOrderForCurrentUser(o))
+                  .filter(o => (o.status || 'Pending') !== 'Paid')
+                  .slice()
+                  .sort((a, b) => getOrderTimeValue(a) - getOrderTimeValue(b))
+
+                if (pendingOrders.length === 0) {
+                  return (
+                    <div className="orders-empty">
+                      <div className="empty-title">No pending orders</div>
+                      <div className="empty-subtitle">All your orders are marked as paid.</div>
+                    </div>
+                  )
+                }
+
+                return (
+                  <>
+                    <div className="weekly-breakdown-title" style={{ marginBottom: 8 }}>
+                      All Pending Orders
+                    </div>
+                    <div className="orders-table-wrap">
+                      <table className="orders-table">
+                        <thead>
+                          <tr>
+                            <th>Time</th>
+                            <th>Product</th>
+                            <th className="num">Qty</th>
+                            <th className="num">Amount</th>
+                            <th>Status</th>
+                            <th>Payment</th>
+                            <th>Customer</th>
+                            <th className="num">Total</th>
+                            <th>Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {pendingOrders.map((o, idx) => (
+                            <tr key={`pending-only-${o.id}`} data-order={`Pending ${String(idx + 1).padStart(3, '0')}`}>
+                              <td className="muted" data-label="Time">{o.time}</td>
+                              <td data-label="Product">
+                                <div className="prod-cell">
+                                  <div className="prod-name">{o.product}</div>
+                                  <div className="prod-sub">Pending #{String(idx + 1).padStart(3, '0')}</div>
+                                  <div className="prod-sub">
+                                    {(() => {
+                                      const orderDate = getOrderDateKey(o)
+                                      if (!orderDate) return 'Day: Unknown'
+                                      const today = toLocalDateKey(new Date())
+                                      const dayText = new Date(`${orderDate}T00:00:00`).toLocaleDateString('en-US', { weekday: 'long' })
+                                      if (orderDate === today) return `Day: ${dayText} (Today)`
+                                      return `Day: ${dayText} (${orderDate})`
+                                    })()}
+                                  </div>
+                                  {o.emptyBottleSize && Number(o.emptyBottleQty || 0) > 0 ? (
+                                    <div className="prod-sub">
+                                      Empty bottle: {bottleSizes.find(b => b.id === o.emptyBottleSize)?.name} × {o.emptyBottleQty} ({formatKsh(Number(o.emptyBottleAmount || 0))})
+                                    </div>
+                                  ) : null}
+                                </div>
+                              </td>
+                              <td className="num" data-label="Quantity">{o.quantity}</td>
+                              <td className="num" data-label="Amount">{formatKsh(o.unitPrice)}</td>
+                              <td data-label="Status">
+                                <select
+                                  className={`status-select status-${String(o.status || 'Pending').toLowerCase()}`}
+                                  value={o.status || 'Pending'}
+                                  onChange={(e) => setOrderStatus(o.id, e.target.value)}
+                                >
+                                  <option value="Pending">Pending</option>
+                                  <option value="Paid">Paid</option>
+                                </select>
+                              </td>
+                              <td data-label="Payment">
+                                {renderPendingPaymentSelector(o)}
+                              </td>
+                              <td data-label="Customer">{getOrderCustomerName(o) || '—'}</td>
+                              <td className="num strong" data-label="Total">—</td>
+                              <td data-label="Actions">
+                                <button
+                                  type="button"
+                                  className="snackbar-btn ghost"
+                                  style={{ padding: '8px 12px', borderRadius: 12 }}
+                                  onClick={(e) => {
+                                    e.preventDefault()
+                                    e.stopPropagation()
+                                    deleteOrder(o)
+                                  }}
+                                >
+                                  Delete
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                    <div className="orders-summary-bar">
+                      <div className="summary-item">
+                        <div className="summary-label">Pending Orders</div>
+                        <div className="summary-value">{pendingOrders.length}</div>
                       </div>
                     </div>
                   </>

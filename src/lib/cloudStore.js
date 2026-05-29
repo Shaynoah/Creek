@@ -8,6 +8,7 @@ export const CLOUD_KEYS = {
   bottles: 'bottles',
   productPrices: 'productPrices',
   adminAuth: 'adminAuth',
+  users: 'users',
 }
 
 export const loadCloudState = async (key) => {

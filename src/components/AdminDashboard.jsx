@@ -56,6 +56,22 @@ const defaultBottlePricing = {
 
 const ADMIN_AUTH_KEY = 'creekFreshAdminAuthV1'
 const ADMIN_DARKMODE_KEY = 'creekFreshAdminDarkModeV1'
+const USERS_KEY = 'creekFreshUsersV1'
+
+const normalizeUsers = (input) => {
+  if (!Array.isArray(input)) return []
+  const out = []
+  const seen = new Set()
+  for (const raw of input) {
+    const val = String(raw || '').trim()
+    if (!val) continue
+    const key = val.toLowerCase()
+    if (seen.has(key)) continue
+    seen.add(key)
+    out.push(val)
+  }
+  return out
+}
 
 const AdminDashboard = ({ admin, onLogout, onProfileUpdate }) => {
   const [activeView, setActiveView] = useState('dashboard')
@@ -84,6 +100,9 @@ const AdminDashboard = ({ admin, onLogout, onProfileUpdate }) => {
     confirmPassword: '',
   })
   const [profileMsg, setProfileMsg] = useState('')
+  const [systemUsers, setSystemUsers] = useState([])
+  const [newSystemUser, setNewSystemUser] = useState('')
+  const [usersMsg, setUsersMsg] = useState('')
   const mainScrollRef = useRef(null)
   const [adminDarkMode, setAdminDarkMode] = useState(() => {
     try {
@@ -181,8 +200,27 @@ const AdminDashboard = ({ admin, onLogout, onProfileUpdate }) => {
     try { localStorage.setItem(PRODUCTS_KEY, JSON.stringify(next)) } catch {}
     saveCloudState(CLOUD_KEYS.productPrices, next).catch(() => {})
   }
+  const loadSystemUsers = () => {
+    try {
+      const raw = localStorage.getItem(USERS_KEY)
+      const parsed = raw ? JSON.parse(raw) : ['jere']
+      const next = normalizeUsers(parsed)
+      const fallback = next.length > 0 ? next : ['jere']
+      setSystemUsers(fallback)
+      localStorage.setItem(USERS_KEY, JSON.stringify(fallback))
+    } catch {
+      setSystemUsers(['jere'])
+    }
+  }
+  const saveSystemUsers = (nextUsers) => {
+    const normalized = normalizeUsers(nextUsers)
+    const safe = normalized.length > 0 ? normalized : ['jere']
+    setSystemUsers(safe)
+    try { localStorage.setItem(USERS_KEY, JSON.stringify(safe)) } catch {}
+    saveCloudState(CLOUD_KEYS.users, safe).catch(() => {})
+  }
   useEffect(() => {
-    loadTanks(); loadBottles(); loadProductPrices()
+    loadTanks(); loadBottles(); loadProductPrices(); loadSystemUsers()
   }, [])
 
   // Realtime: update admin UI instantly when other devices write to Supabase.
@@ -224,6 +262,13 @@ const AdminDashboard = ({ admin, onLogout, onProfileUpdate }) => {
         setProductPrices(nextPrices)
         try { localStorage.setItem(PRODUCTS_KEY, JSON.stringify(nextPrices)) } catch {}
       }
+
+      if (key === CLOUD_KEYS.users) {
+        const nextUsers = normalizeUsers(row.payload)
+        if (nextUsers.length === 0) return
+        setSystemUsers(nextUsers)
+        try { localStorage.setItem(USERS_KEY, JSON.stringify(nextUsers)) } catch {}
+      }
     })
 
     return () => { unsubscribe?.() }
@@ -233,11 +278,12 @@ const AdminDashboard = ({ admin, onLogout, onProfileUpdate }) => {
     let alive = true
     const syncCloud = async () => {
       const localBest = loadBestLocalOrdersSnapshot()
-      const [cloudOrders, cloudTanks, cloudBottles, cloudPrices] = await Promise.all([
+      const [cloudOrders, cloudTanks, cloudBottles, cloudPrices, cloudUsers] = await Promise.all([
         loadCloudState(CLOUD_KEYS.orders),
         loadCloudState(CLOUD_KEYS.tanks),
         loadCloudState(CLOUD_KEYS.bottles),
         loadCloudState(CLOUD_KEYS.productPrices),
+        loadCloudState(CLOUD_KEYS.users),
       ])
       if (!alive) return
       if (Array.isArray(cloudOrders) && cloudOrders.length > 0) {
@@ -271,6 +317,11 @@ const AdminDashboard = ({ admin, onLogout, onProfileUpdate }) => {
       if (cloudPrices && typeof cloudPrices === 'object') {
         setProductPrices(p => ({ ...p, ...cloudPrices }))
         try { localStorage.setItem(PRODUCTS_KEY, JSON.stringify(cloudPrices)) } catch {}
+      }
+      const normalizedCloudUsers = normalizeUsers(cloudUsers)
+      if (normalizedCloudUsers.length > 0) {
+        setSystemUsers(normalizedCloudUsers)
+        try { localStorage.setItem(USERS_KEY, JSON.stringify(normalizedCloudUsers)) } catch {}
       }
     }
     syncCloud().catch(() => {})
@@ -550,7 +601,11 @@ const AdminDashboard = ({ admin, onLogout, onProfileUpdate }) => {
 
                   const weekly = sumPaidByMethod(weekStart, weekEnd)
                   const monthly = sumPaidByMethod(monthStart, monthEnd)
-                  const tankLiters = tanks.reduce((s, t) => s + Number(t.liters || 0), 0)
+                  const tankBreakdown = tanks.map((tank, idx) => ({
+                    id: tank.id || `${tank.name || 'tank'}-${idx}`,
+                    name: String(tank.name || `Tank ${idx + 1}`),
+                    liters: Number(tank.liters || 0),
+                  }))
                   const bottleStock = Object.values(bottles || {}).reduce((s, r) => s + Number((r || {}).qty || 0), 0)
 
 
@@ -602,8 +657,18 @@ const AdminDashboard = ({ admin, onLogout, onProfileUpdate }) => {
                           <div className="week-day dash-inv-card">
                             <div className="dash-metric-icon inv">🛢️</div>
                             <div className="week-day-label">Water in Tanks</div>
-                            <div className="week-day-value">{Number(tankLiters).toLocaleString()} L</div>
-                            <div className="week-day-hint">{tanks.length} tank(s)</div>
+                            {tankBreakdown.length === 0 ? (
+                              <div className="week-day-hint">No tanks added yet</div>
+                            ) : (
+                              <div className="tank-breakdown-list">
+                                {tankBreakdown.map((tank) => (
+                                  <div key={tank.id} className="tank-breakdown-row">
+                                    <span className="tank-breakdown-name">{tank.name}</span>
+                                    <span className="tank-breakdown-value">{tank.liters.toLocaleString()} L</span>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
                           </div>
                           <div className="week-day dash-inv-card">
                             <div className="dash-metric-icon inv">🧴</div>
@@ -1653,6 +1718,84 @@ const AdminDashboard = ({ admin, onLogout, onProfileUpdate }) => {
                     </button>
                   </div>
                 </form>
+
+                <div className="weekly-breakdown" style={{ marginTop: 16 }}>
+                  <div className="weekly-breakdown-title">System Users</div>
+                  <div className="form-row">
+                    <div className="form-group">
+                      <label htmlFor="newSystemUser">Add User</label>
+                      <input
+                        id="newSystemUser"
+                        className="form-input"
+                        value={newSystemUser}
+                        onChange={(e) => setNewSystemUser(e.target.value)}
+                        placeholder="Enter username (e.g. jere)"
+                      />
+                    </div>
+                    <div className="form-group" style={{ justifyContent: 'flex-end' }}>
+                      <button
+                        type="button"
+                        className="submit-btn"
+                        onClick={() => {
+                          setUsersMsg('')
+                          const candidate = String(newSystemUser || '').trim()
+                          if (!candidate) {
+                            setUsersMsg('Enter a user name first.')
+                            return
+                          }
+                          const exists = systemUsers.some(u => u.toLowerCase() === candidate.toLowerCase())
+                          if (exists) {
+                            setUsersMsg('That user already exists.')
+                            return
+                          }
+                          saveSystemUsers([...systemUsers, candidate])
+                          setNewSystemUser('')
+                          setUsersMsg('User added.')
+                        }}
+                      >
+                        Add User
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="orders-table-wrap" style={{ marginTop: 10 }}>
+                    <table className="orders-table">
+                      <thead>
+                        <tr>
+                          <th>User</th>
+                          <th className="num">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {systemUsers.map((u) => (
+                          <tr key={u}>
+                            <td data-label="User">{u}</td>
+                            <td className="num" data-label="Actions">
+                              <button
+                                type="button"
+                                className="snackbar-btn ghost"
+                                onClick={() => {
+                                  setUsersMsg('')
+                                  if (systemUsers.length <= 1) {
+                                    setUsersMsg('Keep at least one user in the system.')
+                                    return
+                                  }
+                                  saveSystemUsers(systemUsers.filter(x => x.toLowerCase() !== u.toLowerCase()))
+                                  setUsersMsg('User removed.')
+                                }}
+                              >
+                                Remove
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  {usersMsg ? (
+                    <div className="orders-subtitle" style={{ marginTop: 8 }}>{usersMsg}</div>
+                  ) : null}
+                </div>
               </div>
             )}
           </div>
