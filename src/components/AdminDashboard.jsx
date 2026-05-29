@@ -532,6 +532,13 @@ const AdminDashboard = ({ admin, onLogout, onProfileUpdate }) => {
               <span className="nav-text">All Orders</span>
             </button>
             <button
+              className={`nav-item ${activeView === 'pending-orders' ? 'active' : ''}`}
+              onClick={() => setActiveView('pending-orders')}
+            >
+              <span className="nav-icon">⏳</span>
+              <span className="nav-text">Pending Orders</span>
+            </button>
+            <button
               className={`nav-item ${activeView === 'sales' ? 'active' : ''}`}
               onClick={() => setActiveView('sales')}
             >
@@ -871,6 +878,105 @@ const AdminDashboard = ({ admin, onLogout, onProfileUpdate }) => {
                         <div className="summary-item">
                           <div className="summary-label">Total</div>
                           <div className="summary-value accent">{formatKsh(todaysTotal)}</div>
+                        </div>
+                      </div>
+                    </>
+                  )
+                })()}
+              </div>
+            )}
+            {activeView === 'pending-orders' && (
+              <div className="view-content my-orders-view">
+                <div className="orders-header">
+                  <div>
+                    <h2>Pending Orders</h2>
+                  </div>
+                  <div className="orders-meta">
+                    <div className="orders-pill">
+                      <span className="pill-label">Date</span>
+                      <span className="pill-value">
+                        {new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: '2-digit' })}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {(() => {
+                  const pendingOrders = orders
+                    .filter(o => (o.status || 'Pending') !== 'Paid')
+                    .slice()
+                    .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp))
+
+                  if (pendingOrders.length === 0) {
+                    return (
+                      <div className="orders-empty">
+                        <div className="empty-title">No pending orders</div>
+                        <div className="empty-subtitle">All orders are currently marked as paid.</div>
+                      </div>
+                    )
+                  }
+
+                  return (
+                    <>
+                      <div className="weekly-breakdown-title" style={{ marginBottom: 8 }}>All Pending Orders</div>
+                      <div className="orders-table-wrap">
+                        <table className="orders-table">
+                          <thead>
+                            <tr>
+                              <th>Time</th>
+                              <th>Product</th>
+                              <th>User</th>
+                              <th className="num">Qty</th>
+                              <th className="num">Amount</th>
+                              <th>Status</th>
+                              <th>Payment</th>
+                              <th className="num">Total</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {pendingOrders.map((o, idx) => (
+                              <tr key={`admin-pending-${o.id}`} data-order={`Pending ${String(idx + 1).padStart(3, '0')}`}>
+                                <td className="muted" data-label="Time">{o.time}</td>
+                                <td data-label="Product">
+                                  <div className="prod-cell">
+                                    <div className="prod-name">{o.product}</div>
+                                    <div className="prod-sub">Pending #{String(idx + 1).padStart(3, '0')}</div>
+                                    <div className="prod-sub">
+                                      {(() => {
+                                        const orderDate = getOrderDateKey(o)
+                                        if (!orderDate) return 'Day: Unknown'
+                                        const dayText = new Date(`${orderDate}T00:00:00`).toLocaleDateString('en-US', { weekday: 'long' })
+                                        return `Day: ${dayText} (${orderDate})`
+                                      })()}
+                                    </div>
+                                  </div>
+                                </td>
+                                <td data-label="User">
+                                  {o.username || '—'}
+                                </td>
+                                <td className="num" data-label="Quantity">{o.quantity}</td>
+                                <td className="num" data-label="Amount">{formatKsh(o.unitPrice)}</td>
+                                <td data-label="Status">
+                                  <span className={`status-select status-${String(o.status || 'Pending').toLowerCase()}`} style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', cursor: 'default' }}>
+                                    {o.status || 'Pending'}
+                                  </span>
+                                </td>
+                                <td data-label="Payment">
+                                  <span className={`pay-badge ${o.paymentMethod}`}>
+                                    <span className="pay-label">{o.paymentMethod?.toUpperCase()}</span>
+                                  </span>
+                                </td>
+                                <td className="num strong" data-label="Total">—</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+
+                      <div className="orders-summary-bar">
+                        <div className="summary-item">
+                          <div className="summary-label">Pending Orders</div>
+                          <div className="summary-value">{pendingOrders.length}</div>
                         </div>
                       </div>
                     </>
