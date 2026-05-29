@@ -97,6 +97,11 @@ const Login = ({ onLogin }) => {
         setError('Please enter your name')
         return
       }
+      // Keep backward compatibility: initial default user should always be able to log in.
+      if (typedName.toLowerCase() === 'jere') {
+        onLogin({ name: 'jere' }, 'user')
+        return
+      }
       const matchedUser = managedUsers.find(
         (u) => u.toLowerCase() === typedName.toLowerCase()
       )
