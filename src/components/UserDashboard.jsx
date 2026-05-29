@@ -1023,13 +1023,30 @@ const UserDashboard = ({ user, onLogout }) => {
                   </div>
                 </div>
               </div>
+              <div className="orders-top-tabs" role="tablist" aria-label="Orders views">
+                <button
+                  type="button"
+                  className="orders-top-tab active"
+                  aria-selected="true"
+                >
+                  Paid Orders
+                </button>
+                <button
+                  type="button"
+                  className="orders-top-tab"
+                  onClick={() => setActiveView('pending-orders')}
+                  aria-selected="false"
+                >
+                  Pending Orders
+                </button>
+              </div>
 
               {(() => {
                 const myOrders = orders
                   .filter(o => isOrderForCurrentUser(o))
                   .filter(o => (o.status || 'Pending') === 'Paid')
                   .slice()
-                  .sort((a, b) => getOrderTimeValue(a) - getOrderTimeValue(b))
+                  .sort((a, b) => getOrderTimeValue(b) - getOrderTimeValue(a))
 
                 const paidOrders = myOrders
                 const carryPendingOrders = []
@@ -1051,6 +1068,24 @@ const UserDashboard = ({ user, onLogout }) => {
 
                 return (
                   <>
+                    <div className="orders-summary-bar">
+                      <div className="summary-item">
+                        <div className="summary-label">Orders</div>
+                        <div className="summary-value">{trackableOrders.length}</div>
+                      </div>
+                      <div className="summary-divider" />
+                      <div className="summary-item">
+                        <div className="summary-label">Total</div>
+                        <div className="summary-value accent">{formatKsh(todaysTotal)}</div>
+                      </div>
+                      <div className="summary-divider" />
+                      <div className="summary-item">
+                        <div className="summary-label">Paid</div>
+                        <div className="summary-value">
+                          {trackableOrders.filter(o => (o.status || 'Pending') === 'Paid').length}
+                        </div>
+                      </div>
+                    </div>
                     <div className="weekly-breakdown-title" style={{ marginBottom: 8 }}>Paid Orders</div>
                     <div className="orders-table-wrap">
                       <table className="orders-table">
@@ -1236,25 +1271,6 @@ const UserDashboard = ({ user, onLogout }) => {
                         </div>
                       </>
                     ) : null}
-
-                    <div className="orders-summary-bar">
-                      <div className="summary-item">
-                        <div className="summary-label">Orders</div>
-                        <div className="summary-value">{trackableOrders.length}</div>
-                      </div>
-                      <div className="summary-divider" />
-                      <div className="summary-item">
-                        <div className="summary-label">Total</div>
-                        <div className="summary-value accent">{formatKsh(todaysTotal)}</div>
-                      </div>
-                      <div className="summary-divider" />
-                      <div className="summary-item">
-                        <div className="summary-label">Paid</div>
-                        <div className="summary-value">
-                          {trackableOrders.filter(o => (o.status || 'Pending') === 'Paid').length}
-                        </div>
-                      </div>
-                    </div>
                   </>
                 )
               })()}
@@ -1274,13 +1290,30 @@ const UserDashboard = ({ user, onLogout }) => {
                   </div>
                 </div>
               </div>
+              <div className="orders-top-tabs" role="tablist" aria-label="Orders views">
+                <button
+                  type="button"
+                  className="orders-top-tab"
+                  onClick={() => setActiveView('my-orders')}
+                  aria-selected="false"
+                >
+                  Paid Orders
+                </button>
+                <button
+                  type="button"
+                  className="orders-top-tab active"
+                  aria-selected="true"
+                >
+                  Pending Orders
+                </button>
+              </div>
 
               {(() => {
                 const pendingOrders = orders
                   .filter(o => isOrderForCurrentUser(o))
                   .filter(o => (o.status || 'Pending') !== 'Paid')
                   .slice()
-                  .sort((a, b) => getOrderTimeValue(a) - getOrderTimeValue(b))
+                  .sort((a, b) => getOrderTimeValue(b) - getOrderTimeValue(a))
 
                 if (pendingOrders.length === 0) {
                   return (
@@ -1293,6 +1326,12 @@ const UserDashboard = ({ user, onLogout }) => {
 
                 return (
                   <>
+                    <div className="orders-summary-bar">
+                      <div className="summary-item">
+                        <div className="summary-label">Pending Orders</div>
+                        <div className="summary-value">{pendingOrders.length}</div>
+                      </div>
+                    </div>
                     <div className="weekly-breakdown-title" style={{ marginBottom: 8 }}>
                       All Pending Orders
                     </div>
@@ -1371,12 +1410,6 @@ const UserDashboard = ({ user, onLogout }) => {
                           ))}
                         </tbody>
                       </table>
-                    </div>
-                    <div className="orders-summary-bar">
-                      <div className="summary-item">
-                        <div className="summary-label">Pending Orders</div>
-                        <div className="summary-value">{pendingOrders.length}</div>
-                      </div>
                     </div>
                   </>
                 )

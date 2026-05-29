@@ -608,11 +608,14 @@ const AdminDashboard = ({ admin, onLogout, onProfileUpdate }) => {
 
                   const weekly = sumPaidByMethod(weekStart, weekEnd)
                   const monthly = sumPaidByMethod(monthStart, monthEnd)
+                  const currentTankIndex = tanks.findIndex(t => Number(t?.liters || 0) > 0)
                   const tankBreakdown = tanks.map((tank, idx) => ({
                     id: tank.id || `${tank.name || 'tank'}-${idx}`,
                     name: String(tank.name || `Tank ${idx + 1}`),
                     liters: Number(tank.liters || 0),
+                    isActive: currentTankIndex >= 0 && idx === currentTankIndex,
                   }))
+                  const activeTank = currentTankIndex >= 0 ? tankBreakdown[currentTankIndex] : null
                   const bottleStock = Object.values(bottles || {}).reduce((s, r) => s + Number((r || {}).qty || 0), 0)
 
 
@@ -664,13 +667,21 @@ const AdminDashboard = ({ admin, onLogout, onProfileUpdate }) => {
                           <div className="week-day dash-inv-card">
                             <div className="dash-metric-icon inv">🛢️</div>
                             <div className="week-day-label">Water in Tanks</div>
+                            <div className="week-day-hint">
+                              {activeTank
+                                ? `Currently supplying: ${activeTank.name}`
+                                : 'No active supply tank'}
+                            </div>
                             {tankBreakdown.length === 0 ? (
                               <div className="week-day-hint">No tanks added yet</div>
                             ) : (
                               <div className="tank-breakdown-list">
                                 {tankBreakdown.map((tank) => (
                                   <div key={tank.id} className="tank-breakdown-row">
-                                    <span className="tank-breakdown-name">{tank.name}</span>
+                                    <span className="tank-breakdown-name">
+                                      {tank.name}
+                                      {tank.isActive ? <span className="tank-active-badge">In Use</span> : null}
+                                    </span>
                                     <span className="tank-breakdown-value">{tank.liters.toLocaleString()} L</span>
                                   </div>
                                 ))}
@@ -1201,7 +1212,8 @@ const AdminDashboard = ({ admin, onLogout, onProfileUpdate }) => {
                       if (!name || !Number.isFinite(litersNum) || litersNum < 0) {
                         return
                       }
-                      const tank = { id: Date.now(), name, liters: litersNum, addedAt: new Date().toISOString() }
+                      const nowIso = new Date().toISOString()
+                      const tank = { id: Date.now(), name, liters: litersNum, addedAt: nowIso, refilledAt: nowIso }
                       const next = [tank, ...tanks]
                       setTanks(next); saveTanks(next); setNewTank({ name: '', liters: '' })
                     }}
@@ -1224,7 +1236,8 @@ const AdminDashboard = ({ admin, onLogout, onProfileUpdate }) => {
                         if (!name || !Number.isFinite(litersNum) || litersNum < 0) {
                           return
                         }
-                        const tank = { id: Date.now(), name, liters: litersNum, addedAt: new Date().toISOString() }
+                        const nowIso = new Date().toISOString()
+                        const tank = { id: Date.now(), name, liters: litersNum, addedAt: nowIso, refilledAt: nowIso }
                         const next = [tank, ...tanks]
                         setTanks(next); saveTanks(next); setNewTank({ name: '', liters: '' })
                       }}
@@ -1235,11 +1248,11 @@ const AdminDashboard = ({ admin, onLogout, onProfileUpdate }) => {
                   <div className="orders-table-wrap inv-tanks-wrap">
                     <table className="orders-table">
                       <thead>
-                        <tr><th>Name</th><th className="num">Liters</th><th>Added</th><th className="num">Actions</th></tr>
+                        <tr><th>Name</th><th className="num">Liters</th><th>Added</th><th>Last Refilled</th><th className="num">Actions</th></tr>
                       </thead>
                       <tbody>
                         {tanks.length === 0 ? (
-                          <tr><td colSpan="4" className="muted" style={{ padding: 16 }}>No tanks yet</td></tr>
+                          <tr><td colSpan="5" className="muted" style={{ padding: 16 }}>No tanks yet</td></tr>
                         ) : tanks.map(t => (
                           <tr key={t.id}>
                             <td data-label="Name">
@@ -1266,6 +1279,9 @@ const AdminDashboard = ({ admin, onLogout, onProfileUpdate }) => {
                               ) : `${Number(t.liters || 0).toLocaleString()} L`}
                             </td>
                             <td data-label="Added">{new Date(t.addedAt).toLocaleString()}</td>
+                            <td data-label="Last Refilled">
+                              {t.refilledAt ? new Date(t.refilledAt).toLocaleString() : '—'}
+                            </td>
                             <td className="num" data-label="Actions">
                               {editingTankId === t.id ? (
                                 <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
@@ -1275,7 +1291,14 @@ const AdminDashboard = ({ admin, onLogout, onProfileUpdate }) => {
                                       const name = String(tempTank.name || '').trim()
                                       const liters = Number.parseFloat(String(tempTank.liters || '0'))
                                       if (!name || !Number.isFinite(liters) || liters < 0) return
-                                      const next = tanks.map(x => x.id === t.id ? { ...x, name, liters } : x)
+                                      const previousLiters = Number(t.liters || 0)
+                                      const isRefill = liters > previousLiters
+                                      const next = tanks.map(x => x.id === t.id ? {
+                                        ...x,
+                                        name,
+                                        liters,
+                                        refilledAt: isRefill ? new Date().toISOString() : (x.refilledAt || x.addedAt || ''),
+                                      } : x)
                                       setTanks(next); saveTanks(next)
                                       setEditingTankId(null); setTempTank({ name: '', liters: '' })
                                     }}

@@ -940,6 +940,32 @@
   text-align: center;
 }
 
+.orders-top-tabs {
+  display: inline-flex;
+  gap: 8px;
+  margin-bottom: 14px;
+  padding: 6px;
+  border-radius: 14px;
+  border: 1px solid rgba(33, 150, 243, 0.12);
+  background: rgba(255, 255, 255, 0.7);
+}
+
+.orders-top-tab {
+  border: 1px solid transparent;
+  background: transparent;
+  color: #546E7A;
+  padding: 10px 14px;
+  border-radius: 10px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.orders-top-tab.active {
+  color: #0D47A1;
+  border-color: rgba(33, 150, 243, 0.26);
+  background: rgba(33, 150, 243, 0.12);
+}
+
 .empty-title {
   font-size: 1.2rem;
   font-weight: 800;
@@ -1210,6 +1236,21 @@
 .dashboard-container[data-theme="dark"] .orders-table-wrap {
   background: rgba(2, 6, 23, 0.35);
   border-color: rgba(148, 163, 184, 0.16);
+}
+
+.dashboard-container[data-theme="dark"] .orders-top-tabs {
+  background: rgba(2, 6, 23, 0.42);
+  border-color: rgba(148, 163, 184, 0.2);
+}
+
+.dashboard-container[data-theme="dark"] .orders-top-tab {
+  color: rgba(226, 232, 240, 0.78);
+}
+
+.dashboard-container[data-theme="dark"] .orders-top-tab.active {
+  color: rgba(224, 242, 254, 0.98);
+  border-color: rgba(125, 211, 252, 0.34);
+  background: rgba(56, 189, 248, 0.18);
 }
 
 .dashboard-container[data-theme="dark"] .pill-value,
@@ -1852,9 +1893,25 @@
 }
 
 .tank-breakdown-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
   font-size: 0.88rem;
   font-weight: 700;
   color: #37474F;
+}
+
+.tank-active-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.2px;
+  color: #0B6B3A;
+  border: 1px solid rgba(34, 197, 94, 0.35);
+  background: rgba(34, 197, 94, 0.12);
 }
 
 .tank-breakdown-value {
@@ -1914,6 +1971,11 @@
 }
 .dashboard-container[data-theme="dark"] .tank-breakdown-name {
   color: rgba(226, 232, 240, 0.92);
+}
+.dashboard-container[data-theme="dark"] .tank-active-badge {
+  color: rgba(187, 247, 208, 0.98);
+  border-color: rgba(34, 197, 94, 0.45);
+  background: rgba(22, 163, 74, 0.2);
 }
 .dashboard-container[data-theme="dark"] .tank-breakdown-value {
   color: rgba(125, 211, 252, 0.98);
@@ -2920,6 +2982,12 @@
     margin-top: 4px;
     margin-bottom: 8px;
     font-size: 0.8rem;
+  }
+
+  .orders-top-tabs {
+    width: 100%;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
   }
 
   /* Dark mode mobile contrast fixes for stacked order/tank cards */
